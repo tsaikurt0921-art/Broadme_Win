@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace Broadme.Win.Services.Logging;
 
 public sealed class BroadmeLogger

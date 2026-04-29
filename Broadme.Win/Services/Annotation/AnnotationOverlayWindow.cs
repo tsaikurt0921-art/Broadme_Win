@@ -25,7 +25,7 @@ public sealed class AnnotationOverlayWindow : Window
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
-        Background = Brushes.Transparent;
+        Background = System.Windows.Media.Brushes.Transparent;
         Topmost = true;
         ShowInTaskbar = false;
         IsHitTestVisible = false;
@@ -34,7 +34,7 @@ public sealed class AnnotationOverlayWindow : Window
         {
             Width = bounds.Width,
             Height = bounds.Height,
-            Background = Brushes.Transparent,
+            Background = System.Windows.Media.Brushes.Transparent,
             IsHitTestVisible = false
         };
 
@@ -66,7 +66,7 @@ public sealed class AnnotationOverlayWindow : Window
         {
             ShowOverlay();
 
-            var brush = (SolidColorBrush?)new BrushConverter().ConvertFromString(colorHex) ?? Brushes.Red;
+            var brush = (SolidColorBrush?)new BrushConverter().ConvertFromString(colorHex) ?? System.Windows.Media.Brushes.Red;
             _currentStroke = new Polyline
             {
                 Stroke = brush,
