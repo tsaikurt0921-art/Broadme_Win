@@ -1,0 +1,39 @@
+name: Build Broadme Windows MSI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Install WiX Toolset
+      run: dotnet tool install --global wix
+
+    - name: Build MSI
+      shell: pwsh
+      run: |
+        ./package_msi.ps1
+
+    - name: Upload MSI Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Broadme-Win-Installer
+        path: bin/**/Broadme_Win_Installer.msi
+        if-no-files-found: error

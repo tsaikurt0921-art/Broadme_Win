@@ -1,0 +1,54 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Broadme" Manufacturer="Broadme" Version="1.0.0.0" UpgradeCode="0a7d5b8e-6e2c-4f81-a58d-7c2a1b9e3d4f">
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Core UI Setup -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <Feature Id="Main">
+      <!-- Reference the harvested files from Heat -->
+      <ComponentGroupRef Id="AppFiles" />
+      <!-- Reference the shortcuts defined below -->
+      <ComponentGroupRef Id="AppShortcuts" />
+    </Feature>
+
+    <!-- Directory Structure -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Broadme" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Broadme" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- Shortcuts and Registry entries -->
+    <ComponentGroup Id="AppShortcuts" Directory="INSTALLFOLDER">
+      <Component Id="ApplicationShortcut" Guid="*">
+        <!-- Start Menu Shortcut -->
+        <Shortcut Id="ApplicationStartMenuShortcut" 
+                  Name="Broadme" 
+                  Description="Broadme Screen Sharing"
+                  Target="[INSTALLFOLDER]Broadme.Win.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Directory="ApplicationProgramsFolder" />
+        
+        <!-- Desktop Shortcut -->
+        <Shortcut Id="ApplicationDesktopShortcut" 
+                  Name="Broadme" 
+                  Description="Broadme Screen Sharing"
+                  Target="[INSTALLFOLDER]Broadme.Win.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Directory="DesktopFolder" />
+
+        <!-- Cleanup -->
+        <RemoveFolder Id="CleanupShortcut" Directory="ApplicationProgramsFolder" On="uninstall" />
+        
+        <!-- Registry Key to track installation -->
+        <RegistryValue Root="HKCU" Key="Software\Broadme" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Package>
+</Wix>

@@ -1,0 +1,22 @@
+<Project Sdk="WixToolset.Sdk/4.0.5">
+  <PropertyGroup>
+    <OutputName>Broadme_Win_Installer</OutputName>
+    <OutputType>Package</OutputType>
+    <DefineConstants>HarvestPath=$(HarvestPath)</DefineConstants>
+    <SuppressIces>ICE03</SuppressIces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Heat" Version="4.0.5" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <HarvestDirectory Include="$(HarvestPath)" Condition="'$(HarvestPath)' != ''">
+      <ComponentGroupName>AppFiles</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <PreprocessorVariable>var.HarvestPath</PreprocessorVariable>
+    </HarvestDirectory>
+  </ItemGroup>
+</Project>
