@@ -6,9 +6,9 @@
         xmlns:vm="clr-namespace:Broadme.Win.ViewModels"
         mc:Ignorable="d"
         Title="Broadme"
-        Width="938"
-        Height="269"
-        ResizeMode="NoResize"
+        Width="960"
+        Height="320"
+        ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="White"
         WindowStyle="SingleBorderWindow">
@@ -85,70 +85,52 @@
                 </StackPanel>
             </DockPanel>
 
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="70"/>
-                    <ColumnDefinition Width="15"/>
-                    <ColumnDefinition Width="100"/>
-                    <ColumnDefinition Width="15"/>
-                    <ColumnDefinition Width="126"/>
-                    <ColumnDefinition Width="15"/>
-                    <ColumnDefinition Width="126"/>
-                    <ColumnDefinition Width="15"/>
-                    <ColumnDefinition Width="135"/>
-                    <ColumnDefinition Width="15"/>
-                    <ColumnDefinition Width="110"/>
-                    <ColumnDefinition Width="15"/>
-                    <ColumnDefinition Width="160"/>
-                    <ColumnDefinition Width="15"/>
-                    <ColumnDefinition Width="125"/>
-                </Grid.ColumnDefinitions>
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,8">
+            <Button Width="80" Height="31" Margin="4" Command="{Binding ToggleBroadcastCommand}" Foreground="White" BorderThickness="0">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="{StaticResource StartBrush}"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="20" Background="{TemplateBinding Background}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsStreaming}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource StopBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+                <TextBlock Text="{Binding StartStopText}" Foreground="White" FontSize="16" FontWeight="Medium"/>
+            </Button>
 
-                <Button Grid.Column="0" Height="31" Command="{Binding ToggleBroadcastCommand}" Foreground="White" BorderThickness="0">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="{StaticResource StartBrush}"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border CornerRadius="20" Background="{TemplateBinding Background}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsStreaming}" Value="True">
-                                    <Setter Property="Background" Value="{StaticResource StopBrush}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                    <TextBlock Text="{Binding StartStopText}" Foreground="White" FontSize="16" FontWeight="Medium"/>
-                </Button>
+            <Button Width="100" Height="31" Margin="4" Command="{Binding CopyUrlCommand}" Style="{StaticResource OutlineBtn}" Content="複製URL" />
+            <Button Width="120" Height="31" Margin="4" Style="{StaticResource OutlineBtn}" Content="顯示QRCode" Command="{Binding ShowQrCommand}"/>
+            <Button Width="120" Height="31" Margin="4" Command="{Binding OpenControlAuthCommand}" Style="{StaticResource OutlineBtn}" Content="控制授權" />
 
-                <Button Grid.Column="2" Height="31" Command="{Binding CopyUrlCommand}" Style="{StaticResource OutlineBtn}" Content="複製URL" />
-                <Button Grid.Column="4" Height="31" Style="{StaticResource OutlineBtn}" Content="顯示QRCode" Command="{Binding ShowQrCommand}"/>
-                <Button Grid.Column="6" Height="31" Command="{Binding OpenControlAuthCommand}" Style="{StaticResource OutlineBtn}" Content="控制授權" />
+            <ComboBox Width="135" Height="31" Margin="4"
+                      ItemsSource="{Binding ResolutionOptions}"
+                      SelectedItem="{Binding SelectedResolution}"
+                      IsEnabled="{Binding IsNotStreaming}"/>
 
-                <ComboBox Grid.Column="8" Height="31"
-                          ItemsSource="{Binding ResolutionOptions}"
-                          SelectedItem="{Binding SelectedResolution}"
-                          IsEnabled="{Binding IsNotStreaming}"/>
+            <ComboBox Width="100" Height="31" Margin="4"
+                      ItemsSource="{Binding FpsOptions}"
+                      SelectedItem="{Binding SelectedFps}"
+                      IsEnabled="{Binding IsNotStreaming}"/>
 
-                <ComboBox Grid.Column="10" Height="31"
-                          ItemsSource="{Binding FpsOptions}"
-                          SelectedItem="{Binding SelectedFps}"
-                          IsEnabled="{Binding IsNotStreaming}"/>
+            <ComboBox Width="200" Height="31" Margin="4"
+                      ItemsSource="{Binding NetworkInterfaces}"
+                      SelectedItem="{Binding SelectedInterface}"
+                      DisplayMemberPath="Label"
+                      IsEnabled="{Binding IsNotStreaming}"/>
 
-                <ComboBox Grid.Column="12" Height="31"
-                          ItemsSource="{Binding NetworkInterfaces}"
-                          SelectedItem="{Binding SelectedInterface}"
-                          DisplayMemberPath="Label"
-                          IsEnabled="{Binding IsNotStreaming}"/>
-
-                <Button Grid.Column="14" Height="31" Style="{StaticResource OutlineBtn}" Content="效能日誌" Command="{Binding OpenLogCommand}"/>
-            </Grid>
+            <Button Width="110" Height="31" Margin="4" Style="{StaticResource OutlineBtn}" Content="效能日誌" Command="{Binding OpenLogCommand}"/>
+        </WrapPanel>
         </Grid>
 
         <StackPanel Grid.Row="2" Orientation="Vertical" HorizontalAlignment="Center">

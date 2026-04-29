@@ -163,12 +163,53 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var pin = _controlPin.Generate();
         await _logger.LogAsync($"控制 PIN 已生成: {pin}");
 
-        _server.Start(_config.BindIp, _config.StreamPort);
-        await _capture.StartAsync(
-            _config.SelectedFps,
-            _config.SelectedResolution,
-            async (bytes, _) => await _server.PushFrameAsync(bytes),
-            _cts.Token);
+        try
+        {
+            _server.Start(_config.BindIp, _config.StreamPort);
+        }
+        catch (System.Net.HttpListenerException ex)
+        {
+            await _logger.LogAsync($"啟動廣播失敗: {ex.Message}");
+            System.Windows.MessageBox.Show(
+                $"無法啟動網路廣播！\n\n原因: {ex.Message}\n\n請嘗試：\n1. 以「系統管理員身分」重新開啟 Broadme\n2. 確認通訊埠 {_config.StreamPort} 沒有被其他程式佔用。",
+                "廣播啟動失敗",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            IsStreaming = false;
+            return;
+        }
+        catch (Exception ex)
+        {
+            await _logger.LogAsync($"啟動廣播發生未知錯誤: {ex.Message}");
+            System.Windows.MessageBox.Show(
+                $"無法啟動網路廣播！\n\n未知錯誤: {ex.Message}",
+                "廣播啟動失敗",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            IsStreaming = false;
+            return;
+        }
+
+        try
+        {
+            await _capture.StartAsync(
+                _config.SelectedFps,
+                _config.SelectedResolution,
+                async (bytes, _) => await _server.PushFrameAsync(bytes),
+                _cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _server.Stop();
+            await _logger.LogAsync($"啟動螢幕擷取失敗: {ex.Message}");
+            System.Windows.MessageBox.Show(
+                $"螢幕擷取啟動失敗！\n\n原因: {ex.Message}",
+                "擷取啟動失敗",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            IsStreaming = false;
+            return;
+        }
 
         IsStreaming = true;
         StatusMessage = $"廣播中: {StreamUrl} | 控制PIN: {pin}";
