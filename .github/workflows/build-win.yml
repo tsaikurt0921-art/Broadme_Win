@@ -1,0 +1,36 @@
+name: Build Broadme Win
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore ./Broadme.Win/Broadme.Win.csproj
+
+      - name: Build
+        run: dotnet build ./Broadme.Win/Broadme.Win.csproj -c Release --no-restore
+
+      - name: Publish (win-x64 self-contained)
+        run: dotnet publish ./Broadme.Win/Broadme.Win.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o ./artifacts/win-x64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Broadme.Win-win-x64
+          path: ./artifacts/win-x64

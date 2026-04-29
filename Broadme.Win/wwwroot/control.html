@@ -1,0 +1,1609 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a1a">
+    <title>遠端控制 - Broadme</title>
+    <!-- 🚀 優化：設定 iOS 加入主畫面的圖示 -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <style>
+        /* 基礎樣式重置，確保跨裝置體驗一致 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent; /* 移除行動裝置觸碰時的藍色高亮 */
+        }
+
+        html {
+            /* 🚩 關鍵：防止雙擊縮放，確保快速連點的反應速度 */
+            touch-action: manipulation;
+            /* 防止使用者意外選取介面文字 */
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #1a1a1a;
+            overflow: hidden; /* 防止頁面捲動 */
+            position: fixed;  /* 鎖定視窗位置 */
+            width: 100%;
+            height: 100%;
+            /* 🚩 關鍵：受控的觸控行為 */
+            touch-action: pan-x pan-y;
+            -webkit-text-size-adjust: 100%;
+        }
+        
+        /* ==================== 1. 等待授權頁面樣式 ==================== */
+        #authWaitingPage {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(55deg, #9a56fb 0%, #fd5557 100%);
+            z-index: 2000;
+        }
+        
+        #authWaitingPage.hidden {
+            display: none;
+        }
+        
+        .auth-waiting {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .auth-waiting h1 {
+            color: white;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 40px;
+        }
+        
+        .pin-display {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .pin-display .hint {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        /* 顯示 6 位數 PIN 碼的樣式 */
+        .pin-code {
+            font-size: 64px;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            letter-spacing: 12px;
+            font-family: 'Courier New', monospace;
+            margin: 20px 0;
+        }
+        
+        /* 輪詢狀態指示器 */
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            color: white;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .info {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        
+        .info a {
+            color: white;
+            text-decoration: underline;
+        }
+        
+        /* ==================== 2. 被拒絕頁面樣式 ==================== */
+        .auth-rejected {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .auth-rejected .icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: shake 0.5s;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        
+        .auth-rejected h1 {
+            color: white;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+        
+        .auth-rejected p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .auth-rejected .pin-info {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        
+        .auth-rejected .pin-info strong {
+            color: white;
+            font-size: 20px;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 40px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        /* 通用按鈕樣式 */
+        .btn-primary,
+        .btn-secondary {
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: white;
+            color: #f5576c;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* ==================== 2.5 授權成功過渡頁面 ==================== */
+        .auth-success {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .success-icon {
+            font-size: 100px;
+            margin-bottom: 30px;
+            text-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .start-btn {
+            background: white;
+            color: #059669;
+            padding: 24px 48px;
+            font-size: 22px;
+            border-radius: 50px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .start-btn:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.3);
+        }
+
+        .start-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+        
+        /* ==================== 3. 核心控制介面樣式 ==================== */
+        .control-page {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        .control-page.active {
+            display: block;
+        }
+
+        /* 📍 視訊串流容器：填滿整個螢幕 */
+        .stream-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        /* 🖼 串流影像本體：object-fit: fill 確保完全填滿且座標對應正確 */
+        .stream-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill; 
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .stream-image.fit {
+            object-fit: contain; /* 提供切換回原始比例的選項 */
+        }
+
+        /* 觸控覆蓋層 */
+        .touch-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: default;
+            touch-action: none;
+            z-index: 10;
+        }
+
+        /* 🔑 新增: 本地繪圖畫布 */
+        .draw-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 讓點擊穿透到 touch-overlay */
+            z-index: 15;
+        }
+
+        /* 🔑 懸浮控制面板 */
+        .floating-controls {
+            position: fixed;
+            top: clamp(12px, 2.5vw, 20px);  /* 自適應頂部間距 */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: clamp(8px, 2vw, 12px);     /* 自適應間距 */
+        }
+
+        /* 主控制列 */
+        .main-controls {
+            display: flex;
+            align-items: center;
+            gap: clamp(8px, 2vw, 12px);
+            background: rgba(240, 235, 255, 0.95);
+            backdrop-filter: blur(20px);
+            padding: clamp(8px, 2vw, 10px) clamp(16px, 4vw, 20px);
+            border-radius: 50px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        }
+
+        /* 相機按鈕特別顏色 */
+        .camera-btn svg {
+            stroke: #10b981 !important; /* 綠色 */
+        }
+        
+        .camera-btn.uploading {
+            animation: pulse 1.5s infinite;
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* 顏色選擇器面板 */
+        .color-panel {
+            display: none;
+            align-items: center;
+            gap: clamp(8px, 2vw, 12px);
+            background: rgba(240, 235, 255, 0.95);
+            backdrop-filter: blur(20px);
+            padding: clamp(8px, 2vw, 10px) clamp(16px, 4vw, 20px);
+            border-radius: 50px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        }
+
+        .color-panel.active {
+            display: flex;
+        }
+
+        /* 圓形控制按鈕 */
+        .color-btn, .control-btn {
+            width: clamp(36px, 8vw, 44px);   /* 🚩 增大觸控面積 */
+            height: clamp(36px, 8vw, 44px);
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+        }
+
+        .color-btn.active {
+            border-color: #8b5cf6;
+            transform: scale(1.15);
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+        }
+
+        /* 按鈕 SVG 圖示 */
+        .control-btn svg {
+            width: clamp(22px, 6vw, 26px);
+            height: clamp(22px, 6vw, 26px);
+            stroke: #8b5cf6;
+            stroke-width: 2.5;
+            fill: none;
+        }
+
+        /* 激活狀態 */
+        .control-btn.active {
+            background: #8b5cf6;
+        }
+
+        .control-btn.active svg {
+            stroke: white;
+        }
+
+        /* 斷開連接按鈕 (紅色) */
+        .control-btn.disconnect {
+            background: #ef4444;
+        }
+
+        .control-btn.disconnect svg {
+            stroke: white;
+            fill: white;
+        }
+
+        /* 顏色選項 */
+        .color-red { background: #ef4444; }
+        .color-yellow { background: #eab308; }
+        .color-green { background: #22c55e; }
+        .color-blue { background: #3b82f6; }
+        .color-black { background: #000000; }
+
+        /* 筆刷大小按鈕 */
+        .size-btn {
+            width: clamp(32px, 6vw, 40px);
+            height: clamp(32px, 6vw, 40px);
+            border-radius: 50%;
+            border: none;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .size-btn.active {
+            background: #8b5cf6;
+            transform: scale(1.15);
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+        }
+
+        .size-btn .size-dot {
+            border-radius: 50%;
+            background: #8b5cf6;
+            transition: all 0.2s ease;
+        }
+
+        .size-btn.active .size-dot {
+            background: white;
+        }
+
+        .size-small .size-dot { 
+            width: clamp(6px, 1.2vw, 8px); 
+            height: clamp(6px, 1.2vw, 8px); 
+        }
+        .size-medium .size-dot { 
+            width: clamp(10px, 2vw, 14px); 
+            height: clamp(10px, 2vw, 14px); 
+        }
+        .size-large .size-dot { 
+            width: clamp(14px, 3vw, 20px); 
+            height: clamp(14px, 3vw, 20px); 
+        }
+
+        /* 撤銷/重做按鈕 */
+        .history-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .history-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: #8b5cf6;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        .history-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .history-btn:active:not(:disabled) {
+            transform: scale(0.9);
+        }
+
+        /* 分隔線 */
+        .separator {
+            width: 1px;
+            height: clamp(24px, 5vw, 32px);  /* 自適應高度 */
+            background: rgba(139, 92, 246, 0.2);
+        }
+
+        /* 載入中動畫 */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            z-index: 5;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 滾動模式提示
+        .scroll-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 12px 20px;
+            border-radius: 16px;
+            color: white;
+            font-size: 14px;
+            display: none;
+            z-index: 50;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .scroll-hint.active {
+            display: block;
+        } */
+    </style>
+</head>
+<body>
+    <!-- 等待授權頁面 -->
+    <div id="authWaitingPage"></div>
+    
+    <!-- 控制頁面 -->
+    <div id="controlPage" class="control-page">
+        <!-- 🔑 懸浮控制面板 -->
+        <div class="floating-controls">
+            <!-- 主控制列 -->
+            <div class="main-controls">
+                <!-- 全螢幕切換 -->
+                <button class="control-btn" id="fullscreenBtn" onclick="toggleFullscreen()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                    </svg>
+                </button>
+                
+                <!-- 滑鼠模式 -->
+                <button class="control-btn" id="mouseBtn" onclick="setMouseMode()">
+                    <svg viewBox="0 0 24 24" id="modeIcon">
+                        <path d="M7 17L17 7M17 7H7M17 7V17" class="mouse-icon"></path>
+                    </svg>
+                </button>
+
+                <!-- 滾動模式 -->
+                <button class="control-btn" id="scrollBtn" onclick="setScrollMode()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+                    </svg>
+                </button>
+                
+                <!-- 畫筆模式 -->
+                <button class="control-btn active" id="drawBtn" onclick="setDrawMode()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                    </svg>
+                </button>
+                
+                <!-- 鎖定模式 -->
+                <button class="control-btn" id="lockBtn" onclick="toggleLock()">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </button>
+
+                <!-- 🔑 新增: 相機拍照 -->
+                <button class="control-btn camera-btn" id="cameraBtn" onclick="triggerCamera()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                </button>
+                <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display: none;" onchange="handleCameraCapture(event)">
+                
+                <div class="separator"></div>
+                
+                <!-- 斷開連接 -->
+                <button class="control-btn disconnect" onclick="disconnect()">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- 顏色選擇面板 -->
+            <div class="color-panel" id="colorPanel">
+                <button class="color-btn color-red active" onclick="setColor('#ef4444')"></button>
+                <button class="color-btn color-yellow" onclick="setColor('#eab308')"></button>
+                <button class="color-btn color-green" onclick="setColor('#22c55e')"></button>
+                <button class="color-btn color-blue" onclick="setColor('#3b82f6')"></button>
+                <button class="color-btn color-black" onclick="setColor('#000000')"></button>
+                
+                <div class="separator"></div>
+                
+                <button class="size-btn size-small active" onclick="setSize(3)">
+                    <div class="size-dot"></div>
+                </button>
+                <button class="size-btn size-medium" onclick="setSize(6)">
+                    <div class="size-dot"></div>
+                </button>
+                <button class="size-btn size-large" onclick="setSize(10)">
+                    <div class="size-dot"></div>
+                </button>
+                
+                <div class="separator"></div>
+                
+                <button class="history-btn" onclick="undo()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M3 7v6h6"></path>
+                        <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+                    </svg>
+                </button>
+                <button class="history-btn" onclick="redo()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 7v6h-6"></path>
+                        <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path>
+                    </svg>
+                </button>
+
+                <div class="separator"></div>
+
+                <!-- 手動清除按鈕 -->
+                <button class="control-btn" style="background: #fee2e2;" onclick="clearAll()">
+                    <svg viewBox="0 0 24 24" style="stroke: #ef4444;">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 🔑 串流容器 - 填滿整個螢幕 -->
+        <div class="stream-container">
+            <img id="streamImage" class="stream-image" alt="控制畫面">
+            <canvas id="drawCanvas" class="draw-canvas"></canvas>
+            <div id="touchOverlay" class="touch-overlay"></div>
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>載入串流中...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 1. 全域變數定義 ====================
+        let myControlPIN = null;        // 本次連線生成的 6 位數隨機驗證碼
+        let pollingInterval = null;     // 用於定時檢查授權狀態的計時器
+        let isPolling = false;          // 標記目前是否正在進行授權輪詢
+        let token = null;               // 獲得授權後獲取的安全 Session Token
+        let currentMode = 'draw';       // 當前的操作模式 (預設為標註繪圖模式)
+        let drawColor = '#ef4444';      // 繪圖使用的顏色 (預設紅色)
+        let drawSize = 3;               // 畫筆粗細等級
+        let isDrawing = false;          // 追蹤觸控或滑鼠是否正處於按下繪圖狀態
+        let localClearTimer = null;     // 自動清除本地畫布筆跡的計時器
+        let lastTouchTime = 0;          // 記錄最後一次觸碰螢幕的時間
+        let lastScrollY = 0;            // 上次捲動的垂直座標
+        let ctx = null;                 // 2D 畫布繪圖上下文
+        let canvas = null;              // 本地繪圖畫布元素
+        let isScrolling = false;        // 標記目前是否正處於捲動手勢狀態
+        let lastAnnotationTime = 0;     // 🚩 用於繪圖指令節流的最後發送時間
+        let lastPosX = 0, lastPosY = 0; // 捲動計算用的起始點座標
+        
+        // ==================== 2. 頁面生命週期處理 ====================
+        
+        /// 當頁面所有內容載入完畢後執行
+        window.addEventListener('load', () => {
+            // 生成我的控制 PIN
+            myControlPIN = generateControlPIN();
+            console.log('已生成控制 PIN:', myControlPIN);
+            
+            // 顯示等待授權畫面
+            showWaitingForAuthorization(myControlPIN);
+            
+            // 開始輪詢
+            startPolling();
+        });
+        
+        /**
+         * 隨機生成一個 6 位數的數字字串作為連線驗證碼
+         */
+        function generateControlPIN() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+        
+        // ==================== 3. 介面轉場與狀態顯示 ====================
+
+        /**
+         * 渲染並顯示「等待授權」介面，告知使用者輸入 PIN
+         */
+        function showWaitingForAuthorization(pin) {
+            const container = document.getElementById('authWaitingPage');
+            container.className = '';
+            container.innerHTML = `
+                <div class="auth-waiting">
+                    <h1>Broadme 遠端控制</h1>
+                    
+                    <div class="pin-display">
+                        <p class="hint">請在主機端輸入以下 PIN 碼以開始控制</p>
+                        <div class="pin-code">${pin}</div>
+                    </div>
+                    
+                    <div class="status">
+                        <div class="spinner"></div>
+                        <p id="statusText">等待老師授權中...</p>
+                    </div>
+                    
+                    <div class="info">
+                        <p>授權後您即可開始操作滑鼠與標註筆</p>
+                        <p>或是<a href="/stream">直接觀看畫面</a> (不具備控制功能)</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        /**
+         * 當主機端拒絕此連線或超時時，顯示「被拒絕」頁面
+         */
+        function showRejectedPage() {
+            const container = document.getElementById('authWaitingPage');
+            container.className = '';
+            container.style.background = 'linear-gradient(55deg, #9a56fb 0%, #fd5557 100%)';
+            
+            container.innerHTML = `
+                <div class="auth-rejected">
+                    <div class="icon">❌</div>
+                    <h1>連線請求已被取消</h1>
+                    <p>主機端老師可能已授權給其他控制端</p>
+                    <p class="pin-info">您的 PIN: <strong>${myControlPIN}</strong></p>
+                    
+                    <div class="actions">
+                        <button class="btn-primary" onclick="goToViewMode()">
+                            僅觀看畫面
+                        </button>
+                        <button class="btn-secondary" onclick="retryAuthorization()">
+                            重新獲取 PIN
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        /**
+         * 啟動定時檢查授權狀態
+         */
+        function startPolling() {
+            if (isPolling) return;
+            
+            isPolling = true;
+            console.log('開始授權輪詢中...');
+            
+            checkAuthorization();
+            pollingInterval = setInterval(checkAuthorization, 1500); // 每 1.5 秒檢查一次
+        }
+        
+        /**
+         * 停止輪詢檢查
+         */
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                isPolling = false;
+                console.log('輪詢已結束');
+            }
+        }
+        
+        /**
+         * 向伺服器發送請求，檢查主機端是否已驗證本裝置的 PIN
+         */
+        async function checkAuthorization() {
+            if (!isPolling) return;
+            
+            try {
+                const res = await fetch('/api/control/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ controlPin: myControlPIN })
+                });
+                
+                const data = await res.json();
+                
+                if (data.authorized && data.token) {
+                    // 🎉 授權成功：獲取由伺服器派發的 Token
+                    console.log('授權成功! 準備顯示開始按鈕');
+                    stopPolling();
+                    token = data.token;
+                    localStorage.setItem('broadme_control_token', token);
+                    
+                    // 🚩 不直接進入控制頁面，改為顯示「點擊進入全螢幕」的啟動畫面
+                    showSuccessOverlay(); 
+                    
+                } else if (data.anyoneAuthorized) {
+                    // ⛈ 有其他授權：主機端目前已有其他控制端，但我們不主動斷開，讓使用者可以等待
+                    const statusText = document.getElementById('statusText');
+                    if (statusText) {
+                        statusText.innerText = '目前已有其他控制端，請等待老師授權...';
+                    }
+                    console.log('主機端目前已有其他授權，繼續輪詢等待中...');
+                }
+                
+            } catch (error) {
+                console.error('授權輪詢過程出錯:', error);
+            }
+        }
+        
+        // ==================== 前往觀看模式 ====================
+        function goToViewMode() {
+            window.location.href = '/stream';
+        }
+        
+        /**
+         * 重新整理並重設整個授權流程
+         */
+        function retryAuthorization() {
+            location.reload();
+        }
+
+        /**
+         * 顯示授權成功畫面，引導使用者點擊以觸發全螢幕
+         */
+        function showSuccessOverlay() {
+            const container = document.getElementById('authWaitingPage');
+            container.className = '';
+            // 使用綠色漸層代表成功
+            container.style.background = 'linear-gradient(55deg, #059669 0%, #10b981 100%)';
+            
+            container.innerHTML = `
+                <div class="auth-success">
+                    <div class="success-icon">✅</div>
+                    <h1 style="margin-bottom: 20px;">授權已核准</h1>
+                    <p style="font-size: 18px; margin-bottom: 40px; color: rgba(255,255,255,0.9);">
+                        已獲得主機控制權限。請點擊下方按鈕以進入全螢幕模式並開始控制。
+                    </p>
+                    
+                    <button class="start-btn" onclick="startFullscreenControl()">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                            <polyline points="11 22 11 15 4 15"></polyline>
+                            <path d="M13 9L21 1"></path>
+                            <path d="M11 15L3 23"></path>
+                        </svg>
+                        開啟全螢幕並開始控制
+                    </button>
+                </div>
+            `;
+        }
+
+        /**
+         * 用戶主動觸發：同時開啟全螢幕並進入控制介面
+         */
+        function startFullscreenControl() {
+            // 🚩 關鍵：這是由用戶手動點擊觸發的，因此瀏覽器允許 requestFullscreen
+            toggleFullscreen();
+            
+            // 進入控制主畫面
+            showControlPage();
+        }
+        
+        /**
+         * 成功獲取授權後，切換 DOM 顯示狀態並啟動核心服務
+         */
+        function showControlPage() {
+            stopPolling();
+            
+            document.getElementById('authWaitingPage').classList.add('hidden');
+            document.getElementById('controlPage').classList.add('active');
+            
+            loadStream();        // 載入影像串流
+            setupTouchEvents();   // 綁定控制手勢
+            initCanvas();        // 初始化標註畫布
+        }
+        
+        // ==================== 5. 畫布標註系統 ====================
+        
+        /**
+         * 初始化本地畫布 (Canvas)
+         */
+        function initCanvas() {
+            canvas = document.getElementById('drawCanvas');
+            if (canvas) {
+                ctx = canvas.getContext('2d');
+                resizeCanvas();
+                // 監聽視窗大小變動，自動適配畫布尺寸
+                window.addEventListener('resize', resizeCanvas);
+            }
+        }
+        
+        /**
+         * 調整畫布尺寸以匹配螢幕解析度，解決模糊問題
+         */
+        function resizeCanvas() {
+            if (!canvas) return;
+            // 考慮裝置像素比 (DPR)，確保 Retina 螢幕上筆跡清晰
+            canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+            canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+            if (ctx) {
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            }
+            clearLocalCanvas();
+        }
+        
+        /**
+         * 清空畫布上的所有筆跡
+         */
+        function clearLocalCanvas() {
+            if (!ctx || !canvas) return;
+            ctx.clearRect(0, 0, canvas.width / window.devicePixelRatio, canvas.height / window.devicePixelRatio);
+        }
+        
+        // ==================== 6. 影像串流加載 ====================
+
+        /**
+         * 啟動 MJPEG 影像流載入
+         */
+        function loadStream() {
+            const streamImg = document.getElementById('streamImage');
+            const loading = document.querySelector('.loading');
+            
+            // 加入時間戳記避免瀏覽器快取
+            streamImg.src = '/stream-control?t=' + Date.now();
+            
+            streamImg.onload = () => {
+                // 成功載入後隱藏載入中動畫
+                loading.style.display = 'none';
+                console.log('影像串流成功連接, 解析度:', streamImg.naturalWidth, '×', streamImg.naturalHeight);
+            };
+            
+            streamImg.onerror = () => {
+                // 失敗時進行自動重試
+                loading.innerHTML = '<div class="spinner"></div><span>連線中斷，正在自動重連...</span>';
+                setTimeout(() => {
+                    streamImg.src = '/stream-control?t=' + Date.now();
+                }, 2000);
+            };
+        }
+        
+        // ==================== 7. 事件座標轉換系統 ====================
+
+        /**
+         * 核心：計算點擊點相對於主機螢幕的歸一化座標 (0.0 - 1.0)
+         * 處理：不同的 object-fit 模式對座標映射的影響
+         */
+        function getRelativePosition(e) {
+            const container = document.getElementById('streamImage');
+            const rect = container.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            
+            // 🚩 情況一：Fill 模式 (拉伸填滿整個容器)
+            // 這是最簡單的模式，直接計算與容器邊界的百分比，邏輯與廣播端座標系一致
+            if (!container.classList.contains('fit')) {
+                const relativeX = (clientX - rect.left) / rect.width;
+                const relativeY = (clientY - rect.top) / rect.height;
+                return {
+                    x: Math.max(0, Math.min(1, relativeX)),
+                    y: Math.max(0, Math.min(1, relativeY))
+                };
+            }
+
+            // 🚩 情況二：Contain 模式 (維持比例並縮放)
+            // 需手動計算並扣除因橫寬比不同產生的「黑邊」偏移量
+            const imageAspect = container.naturalWidth / container.naturalHeight;
+            const containerAspect = rect.width / rect.height;
+            
+            let actualWidth, actualHeight, offsetX, offsetY;
+            
+            if (imageAspect > containerAspect) {
+                // 水平填滿，上下有黑邊
+                actualWidth = rect.width;
+                actualHeight = rect.width / imageAspect;
+                offsetX = 0;
+                offsetY = (rect.height - actualHeight) / 2;
+            } else {
+                // 垂直填滿，左右有黑邊
+                actualWidth = rect.height * imageAspect;
+                actualHeight = rect.height;
+                offsetX = (rect.width - actualWidth) / 2;
+                offsetY = 0;
+            }
+            
+            const relativeX = (clientX - rect.left - offsetX) / actualWidth;
+            const relativeY = (clientY - rect.top - offsetY) / actualHeight;
+            
+            return {
+                x: Math.max(0, Math.min(1, relativeX)),
+                y: Math.max(0, Math.min(1, relativeY))
+            };
+        }
+
+        /**
+         * 初始化輸入事件監聽器 (滑鼠/觸控/繪圖/捲動)
+         */
+        function setupTouchEvents() {
+            const overlay = document.getElementById('touchOverlay');
+            const streamImg = document.getElementById('streamImage');
+            
+            overlay.style.touchAction = 'none'; // 禁用瀏覽器預設觸碰行為，由我們自訂
+            
+            // 禁止 iOS/Android 預設的縮放與手勢，確保全螢幕操作穩定性
+            document.addEventListener('gesturestart', (e) => e.preventDefault());
+            document.addEventListener('gesturechange', (e) => e.preventDefault());
+            document.addEventListener('gestureend', (e) => e.preventDefault());
+            
+            // ==================== 滑鼠/觸控開始 ====================
+            overlay.addEventListener('pointerdown', async (e) => {
+                e.preventDefault();
+                const pos = getRelativePosition(e);
+                lastX = pos.x;
+                lastY = pos.y;
+                
+                if (currentMode === 'draw') {
+                    // 🔑 新增: 觸控時收起顏色面板
+                    const colorPanel = document.getElementById('colorPanel');
+                    if (colorPanel) {
+                        colorPanel.classList.remove('active');
+                    }
+                    
+                    isDrawing = true;
+                    // 如果有正在等待清除的計時器，先取消它
+                    if (localClearTimer) {
+                        clearTimeout(localClearTimer);
+                        localClearTimer = null;
+                    }
+                    sendControl('annotationStart', pos.x, pos.y);
+                    
+                    // 🔑 本地渲染開始
+                    const rect = streamImg.getBoundingClientRect();
+                    const imageAspect = streamImg.naturalWidth / streamImg.naturalHeight;
+                    const containerAspect = rect.width / rect.height;
+                    let actualWidth, actualHeight, offsetX, offsetY;
+                    
+                    if (imageAspect > containerAspect) {
+                        actualWidth = rect.width;
+                        actualHeight = rect.width / imageAspect;
+                        offsetX = 0;
+                        offsetY = (rect.height - actualHeight) / 2;
+                    } else {
+                        actualWidth = rect.height * imageAspect;
+                        actualHeight = rect.height;
+                        offsetX = (rect.width - actualWidth) / 2;
+                        offsetY = 0;
+                    }
+                    
+                    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                    
+                    if (ctx) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = drawColor;
+                        ctx.lineWidth = drawSize;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        ctx.moveTo(clientX - rect.left, clientY - rect.top);
+                    }
+                } else if (currentMode === 'mouse') {
+                    const now = Date.now();
+                    const pos = getRelativePosition(e);
+                    if (now - lastTouchTime < 300) {
+                        sendControl('doubleClick', pos.x, pos.y);
+                    } else {
+                        sendControl('click', pos.x, pos.y);
+                    }
+                    lastTouchTime = now;
+                } else if (currentMode === 'scroll') {
+                    isScrolling = true;
+                    lastPosX = e.clientX || (e.touches && e.touches[0].clientX);
+                    lastPosY = e.clientY || (e.touches && e.touches[0].clientY);
+                }
+            });
+            
+            // ==================== 滑鼠/觸控移動 ====================
+            overlay.addEventListener('pointermove', (e) => {
+                e.preventDefault();
+                const pos = getRelativePosition(e);
+                
+                if (currentMode === 'draw' && isDrawing) {
+                    // 🚀 關鍵優化：實施節流 (Throttling)
+                    // 每 30ms 才發送一次坐標，防止 Apple Pencil 高頻事件塞爆網路
+                    const now = Date.now();
+                    if (now - lastAnnotationTime >= 30) {
+                        sendControl('annotationMove', pos.x, pos.y);
+                        lastAnnotationTime = now;
+                    }
+                    
+                    // 🔑 本地渲染移動 (維持 60-120fps 的流暢感，不參與節流)
+                    if (ctx) {
+                        const rect = streamImg.getBoundingClientRect();
+                        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                        ctx.lineTo(clientX - rect.left, clientY - rect.top);
+                        ctx.stroke();
+                    }
+                } else if (currentMode === 'mouse') {
+                    sendControl('move', pos.x, pos.y);
+                } else if (currentMode === 'scroll' && isScrolling) {
+                    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                    
+                    const deltaX = Math.round(clientX - lastPosX);
+                    const deltaY = Math.round(clientY - lastPosY);
+                    
+                    if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+                        // 🚩 向伺服器發送滾動指令 (注意：電腦滾輪方向通常與手勢相反，這裡做適配)
+                        sendControl('scroll', 0, 0, -deltaY, -deltaX);
+                        lastPosX = clientX;
+                        lastPosY = clientY;
+                    }
+                }
+            });
+            
+            // ==================== 滑鼠/觸控結束 ====================
+            overlay.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                const pos = getRelativePosition(e);
+                
+                if (currentMode === 'draw' && isDrawing) {
+                    isDrawing = false;
+                    sendControl('annotationEnd', pos.x, pos.y);
+                    // 🔑 本地渲染結束
+                    if (ctx) {
+                        ctx.closePath();
+                    }
+                    
+                    // 🚩 停止自動清除本地畫布，讓筆跡留著
+                     if (localClearTimer) clearTimeout(localClearTimer);
+                    // localClearTimer = setTimeout(() => {
+                    //     clearLocalCanvas();
+                    //     localClearTimer = null;
+                    // }, 500);
+                }
+                isScrolling = false;
+            });
+            
+            overlay.addEventListener('pointercancel', (e) => {
+                if (currentMode === 'draw' && isDrawing) {
+                    isDrawing = false;
+                    sendControl('annotationClear', 0, 0);
+                }
+                isScrolling = false;
+            });
+            
+            // ==================== 滾輪事件 ====================
+            overlay.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (currentMode === 'mouse' || currentMode === 'scroll') {
+                    const delta = e.deltaY > 0 ? -15 : 15;
+                    sendControl('scroll', 0, 0, delta);
+                }
+            }, { passive: false });
+        }
+        
+        // ==================== 發送控制指令 ====================
+        async function sendControl(type, x = 0, y = 0, deltaY = null, deltaX = null) {
+            if (!token) return;
+            
+            const img = document.getElementById('streamImage');
+            
+            const payload = {
+                token: token,
+                type: type,
+                x: x,
+                y: y
+            };
+            
+            // 畫筆模式附加顏色、粗細和串流解析度
+            if (type.startsWith('annotation')) {
+                payload.color = drawColor;
+                payload.width = drawSize;
+                payload.streamWidth = img.naturalWidth;
+                payload.streamHeight = img.naturalHeight;
+            }
+            
+            // 滾輪附加 delta
+            if (type === 'scroll') {
+                if (deltaY !== null) payload.deltaY = deltaY;
+                if (deltaX !== null) payload.deltaX = deltaX;
+                // 向後相容舊的 delta 欄位
+                if (deltaY !== null) payload.delta = deltaY;
+            }
+            
+            try {
+                const res = await fetch('/api/input', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await res.json();
+                
+                if (!data.success && data.require_reauth) {
+                    console.log('Token 已過期');
+                    disconnect();
+                }
+            } catch (error) {
+                console.error('發送控制指令失敗:', error);
+            }
+        }
+        
+        // ==================== 8. UI 控制與輔助函式 ====================
+        
+        /**
+         * 切換瀏覽器的全螢幕模式 (適配多種瀏覽器 API)
+         */
+        function toggleFullscreen() {
+            const doc = document.documentElement;
+            // 相容性處理：不同瀏覽器的請求/退出函式名不同
+            const requestFS = doc.requestFullscreen || doc.webkitRequestFullscreen || doc.mozRequestFullScreen || doc.msRequestFullscreen;
+            const exitFS = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+            const fsElement = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+
+            // 🚩 偵測是否為 iPhone (不支援為 DOM 元素開啟全螢幕)
+            const isIPhone = /iPhone/i.test(navigator.userAgent);
+
+            if (!fsElement) {
+                // 進入全螢幕
+                if (requestFS) {
+                    // 使用 Promise 處理，確保在失敗時能通知使用者
+                    const p = requestFS.call(doc);
+                    if (p) {
+                        p.catch(err => {
+                            console.error(`無法進入全螢幕模式: ${err.message}`);
+                            showFullscreenError(isIPhone);
+                        });
+                    }
+                } else {
+                    showFullscreenError(isIPhone);
+                }
+            } else {
+                // 退出全螢幕
+                if (exitFS) {
+                    exitFS.call(document);
+                }
+            }
+        }
+
+        /**
+         * 提示全螢幕錯誤或不支援
+         */
+        function showFullscreenError(isIPhone) {
+            if (isIPhone) {
+                alert('iPhone 瀏覽器限制：請使用「加入主畫面」功能後開啟，即可獲得無網址列的全螢幕體驗。');
+            } else {
+                alert('您的瀏覽器或設備限制了全螢幕功能。');
+            }
+        }
+
+        // 監聽全螢幕狀態變化，同步更新按鈕的選中狀態與畫布尺寸
+        ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(eventType => {
+            document.addEventListener(eventType, () => {
+                const fsElement = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+                const btn = document.getElementById('fullscreenBtn');
+                if (btn) {
+                    if (fsElement) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                    // 🚩 重要：全螢幕切換會改變視窗佈局，必須延遲重繪畫布以重新計算座標
+                    setTimeout(resizeCanvas, 150);
+                }
+            });
+        });
+        
+        /**
+         * 循環切換操作模式 (Draw -> Mouse -> Scroll)
+         */
+        function toggleMode() {
+            if (currentMode === 'draw') {
+                setMouseMode();
+            } else if (currentMode === 'mouse') {
+                setScrollMode();
+            } else {
+                setDrawMode();
+            }
+        }
+        
+        /**
+         * 切換至「標註畫筆」模式
+         */
+        function setDrawMode() {
+            const colorPanel = document.getElementById('colorPanel');
+    
+            if (currentMode === 'draw') {
+                // 如果已經在畫筆模式，則行為改為開關顏色選擇面板
+                if (colorPanel) {
+                    colorPanel.classList.toggle('active');
+                }
+            } else {
+                // 切換至畫筆模式：更新狀態、按鈕樣式並顯示顏色面板
+                currentMode = 'draw';
+                
+                document.querySelectorAll('.control-btn').forEach(btn => btn.classList.remove('active'));
+                const drawBtn = document.getElementById('drawBtn');
+                if (drawBtn) drawBtn.classList.add('active');
+                
+                if (colorPanel) colorPanel.classList.add('active');
+                console.log('模式切換：標註畫筆');
+            }
+        }
+        
+        /**
+         * 切換至「滑鼠控制」模式 (模擬桌面滑鼠行為)
+         */
+        function setMouseMode() {
+            currentMode = 'mouse';
+            
+            // 更新 UI 狀態，隱藏顏色面板
+            document.querySelectorAll('.control-btn').forEach(btn => btn.classList.remove('active'));
+            const mouseBtn = document.getElementById('mouseBtn');
+            if (mouseBtn) mouseBtn.classList.add('active');
+            
+            const colorPanel = document.getElementById('colorPanel');
+            if (colorPanel) colorPanel.classList.remove('active');
+            
+            // 🚩 安全優化：切換到非標註模式時，自動清除所有既存筆跡
+            clearAnnotations();
+            clearLocalCanvas();
+            console.log('模式切換：滑鼠控制');
+        }
+        
+        /**
+         * 切換至「捲動」模式 (手動計算單指捲動位移)
+         */
+        function setScrollMode() {
+            currentMode = 'scroll';
+            
+            document.querySelectorAll('.control-btn').forEach(btn => btn.classList.remove('active'));
+            const scrollBtn = document.getElementById('scrollBtn');
+            if (scrollBtn) scrollBtn.classList.add('active');
+            
+            const colorPanel = document.getElementById('colorPanel');
+            if (colorPanel) colorPanel.classList.remove('active');
+            
+            clearAnnotations();
+            clearLocalCanvas();
+            console.log('模式切換：捲動控制');
+        }
+        
+        /**
+         * 設定畫筆顏色並更新 UI 選中狀態
+         */
+        function setColor(color) {
+            drawColor = color;
+    
+            // 移除所有顏色按鈕的選中邊框
+            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
+            
+            // 映射顏色值到對應的 CSS 類別名以找到 DOM
+            const colorMap = {
+                '#ef4444': 'color-red',
+                '#eab308': 'color-yellow',
+                '#22c55e': 'color-green',
+                '#3b82f6': 'color-blue',
+                '#000000': 'color-black'
+            };
+            
+            const className = colorMap[color];
+            if (className) {
+                const targetBtn = document.querySelector(`.${className}`);
+                if (targetBtn) targetBtn.classList.add('active');
+            }
+            console.log('當前畫筆顏色設定為:', color);
+        }
+        
+        /**
+         * 設定畫筆粗細等級
+         */
+        function setSize(size, event) {
+            drawSize = size;
+            
+            // 更新 UI 選中狀態
+            document.querySelectorAll('.size-btn').forEach(btn => btn.classList.remove('active'));
+            
+            if (event) {
+                let targetBtn = event.currentTarget; // 使用 currentTarget 確保獲取到綁定事件的按鈕本人
+                if (targetBtn && targetBtn.classList.contains('size-btn')) {
+                    targetBtn.classList.add('active');
+                }
+            }
+            console.log('當前畫筆粗細設定為:', size);
+        }
+        
+        // 切換滿版/原始比例
+        function toggleScaleMode() {
+            const img = document.getElementById('streamImage');
+            img.classList.toggle('fit');
+            resizeCanvas(); // 重新計算畫布解析度
+            
+            const isFit = img.classList.contains('fit');
+            console.log('切換比例模式:', isFit ? '原始比例 (Fit)' : '填滿 (Fill)');
+        }
+
+        /**
+         * 一鍵清空所有本地與主機端的繪圖標註
+         */
+        function clearAll() {
+            clearAnnotations(); // 通知伺服器清空
+            clearLocalCanvas(); // 清空本地快感畫布
+            if (localClearTimer) {
+                clearTimeout(localClearTimer);
+                localClearTimer = null;
+            }
+            console.log('標註已全數清空');
+        }
+        
+        /**
+         * 向伺服器發送「清除標註」指令
+         */
+        function clearAnnotations() {
+            if (!token) return;
+            
+            fetch('/api/input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    token: token,
+                    type: 'clearAnnotations',
+                    x: 0,
+                    y: 0
+                })
+            }).then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // 同步確認後，確保本地畫布也清空
+                    clearLocalCanvas();
+                }
+            })
+            .catch(error => console.error('嘗試清除主機端標註時發生失敗:', error));
+        }
+        
+        /**
+         * 中斷目前的連線並返回連線頁面
+         */
+        function disconnect() {
+            if (!confirm('您確定要中斷目前的遠端控制連線嗎？')) return;
+            
+            if (token) {
+                // 安全清理：離開前清空所有標註，避免留在老師螢幕上
+                clearAnnotations();
+                clearLocalCanvas();
+                
+                localStorage.removeItem('broadme_control_token');
+                token = null;
+            }
+            window.location.reload(); // 重整以釋放資源
+        }
+
+        // ==================== 9. 相機拍照與影像上傳功能 ====================
+        
+        /**
+         * 觸發行動裝置的相機原生物件 (透過隱藏的 input:file 點擊實施)
+         */
+        function triggerCamera() {
+            document.getElementById('cameraInput').click();
+        }
+
+        /**
+         * 處理相機拍攝後的影像上傳
+         */
+        async function handleCameraCapture(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const btn = document.getElementById('cameraBtn');
+            btn.classList.add('uploading'); // 啟動按鈕動畫提示正在上傳
+
+            try {
+                // 1. 影像預處理：在瀏覽器本地壓縮影像，減少上傳頻寬消耗
+                const compressedBlob = await compressImage(file);
+                console.log('影像處理中... 原始:', (file.size/1024).toFixed(0), 'KB, 壓縮後:', (compressedBlob.size/1024).toFixed(0), 'KB');
+
+                // 2. 上傳至 Broadme 伺服器
+                const response = await fetch('/api/upload-photo', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'image/jpeg',
+                        'X-Control-Token': token || localStorage.getItem('broadme_control_token') || ''
+                    },
+                    body: compressedBlob
+                });
+
+                if (response.ok) {
+                    console.log('影像上傳成功！照片已自動儲存至主機端');
+                } else {
+                    const errorMsg = await response.text();
+                    alert('影像傳輸失敗：' + errorMsg);
+                }
+
+            } catch (error) {
+                console.error('上傳照片過程中發生錯誤:', error);
+                alert('系統錯誤，無法上傳照片：' + error.message);
+            } finally {
+                btn.classList.remove('uploading');
+                event.target.value = ''; // 重設 input 值，確保連續拍相同景物也能觸發 change 事件
+            }
+        }
+
+        function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const maxSide = 1920;
+
+                        // 計算縮放比例
+                        if (width > maxSide || height > maxSide) {
+                            if (width > height) {
+                                height = Math.round((height * maxSide) / width);
+                                width = maxSide;
+                            } else {
+                                width = Math.round((width * maxSide) / height);
+                                height = maxSide;
+                            }
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // 3. 轉為二進位 Blob (設定品質為 0.8 以平衡清晰度與檔案大小)
+                        canvas.toBlob((blob) => {
+                            if (blob) resolve(blob);
+                            else reject(new Error('影像轉檔失敗 (Canvas toBlob)'));
+                        }, 'image/jpeg', 0.8);
+                    };
+                    img.onerror = () => reject(new Error('影像載入失敗'));
+                    img.src = e.target.result;
+                };
+                reader.onerror = () => reject(new Error('檔案讀取失敗'));
+                reader.readAsDataURL(file);
+            });
+        }
+    </script>
+</body>
+</html>

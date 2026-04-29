@@ -1,0 +1,21 @@
+<Window x:Class="Broadme.Win.Views.LaunchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Broadme" Width="938" Height="269" ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
+        Background="Transparent" WindowStyle="None" AllowsTransparency="True">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0" CornerRadius="20" GlassFrameThickness="0" ResizeBorderThickness="0" UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Border CornerRadius="20" Background="White" BorderBrush="#EEE" BorderThickness="1">
+        <Grid>
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Image Source="/Assets/app-logo.png" Width="100" Height="100" Margin="0,0,0,10"/>
+                <TextBlock Text="Broadme" FontSize="36" Foreground="#8439B0" HorizontalAlignment="Center"/>
+                <ProgressBar Width="220" Height="8" Margin="0,16,0,8" IsIndeterminate="True"/>
+                <TextBlock Text="正在驗證序號" Foreground="#846993" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
