@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using Forms = System.Windows.Forms;
+using WpfPoint = System.Windows.Point;
 
 namespace Broadme.Win.Services.Annotation;
 
@@ -59,7 +60,7 @@ public sealed class AnnotationOverlayWindow : Window
         }
     }
 
-    public void StartStroke(Point point, string colorHex = "#ef4444", double width = 4)
+    public void StartStroke(WpfPoint point, string colorHex = "#ef4444", double width = 4)
     {
         Dispatcher.Invoke(() =>
         {
@@ -80,7 +81,7 @@ public sealed class AnnotationOverlayWindow : Window
         });
     }
 
-    public void MoveStroke(Point point)
+    public void MoveStroke(WpfPoint point)
     {
         Dispatcher.Invoke(() =>
         {
@@ -88,7 +89,7 @@ public sealed class AnnotationOverlayWindow : Window
         });
     }
 
-    public void EndStroke(Point point)
+    public void EndStroke(WpfPoint point)
     {
         Dispatcher.Invoke(() =>
         {

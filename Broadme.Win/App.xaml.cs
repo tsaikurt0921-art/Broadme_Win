@@ -1,14 +1,13 @@
-using System.Windows;
 using Broadme.Win.Services.Auth;
 using Broadme.Win.Views;
 
 namespace Broadme.Win;
 
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
     private readonly SerialManager _serial = new();
 
-    protected override async void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(System.Windows.StartupEventArgs e)
     {
         base.OnStartup(e);
 

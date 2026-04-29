@@ -1,6 +1,8 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace Broadme.Win.Services.Capture;
@@ -25,7 +27,6 @@ public sealed class ScreenCaptureService : IScreenCaptureService
             var sourceBounds = screen.Bounds;
             var sourceSize = new Size(sourceBounds.Width, sourceBounds.Height);
 
-            // 若未指定或格式錯誤，維持原生解析度
             if (targetSize.Width <= 0 || targetSize.Height <= 0)
             {
                 targetSize = sourceSize;
@@ -44,7 +45,6 @@ public sealed class ScreenCaptureService : IScreenCaptureService
                     using var outputBmp = ResizeWithLetterbox(sourceBmp, targetSize);
                     using var ms = new MemoryStream();
 
-                    // 參照 mac 版偏低品質設計，優先穩定與頻寬
                     SaveJpeg(outputBmp, ms, quality: 55L);
 
                     await onFrame(ms.ToArray(), (outputBmp.Width, outputBmp.Height));
@@ -56,7 +56,6 @@ public sealed class ScreenCaptureService : IScreenCaptureService
                 }
                 catch
                 {
-                    // 避免單次擷取錯誤中斷整體串流
                     await Task.Delay(50, token);
                 }
             }
@@ -78,7 +77,6 @@ public sealed class ScreenCaptureService : IScreenCaptureService
         if (string.IsNullOrWhiteSpace(resolution)) return Size.Empty;
 
         var raw = resolution.Trim();
-        // 支援 "1280x720" 與 "1280x720 (HD)"
         var token = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
         var parts = token.Split('x', StringSplitOptions.RemoveEmptyEntries);
 
