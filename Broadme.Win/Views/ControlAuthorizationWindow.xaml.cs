@@ -38,7 +38,7 @@ public partial class ControlAuthorizationWindow : Window
 
     private void PinChanged(object sender, TextChangedEventArgs e)
     {
-        if (sender is not TextBox box) return;
+        if (sender is not System.Windows.Controls.TextBox box) return;
         if (box.Text.Length == 1)
         {
             switch (box.Name)
@@ -72,13 +72,13 @@ public partial class ControlAuthorizationWindow : Window
         if (pin.Length != 6)
         {
             StatusText.Text = "請輸入完整 6 位 PIN";
-            StatusText.Foreground = Brushes.Red;
+            StatusText.Foreground = System.Windows.Media.Brushes.Red;
             return;
         }
 
         _onAuthorize(pin);
         StatusText.Text = $"PIN {pin} 已授權";
-        StatusText.Foreground = Brushes.Green;
+        StatusText.Foreground = System.Windows.Media.Brushes.Green;
         DialogResult = true;
         Close();
     }

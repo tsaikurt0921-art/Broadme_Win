@@ -35,7 +35,7 @@ public partial class QrCodeWindow : Window
 
     private void CopyClick(object sender, RoutedEventArgs e)
     {
-        Clipboard.SetText(_url);
+        System.Windows.Clipboard.SetText(_url);
     }
 
     private void CloseClick(object sender, RoutedEventArgs e)

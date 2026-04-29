@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -186,7 +187,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void CopyUrl()
     {
-        Clipboard.SetText(StreamUrl);
+        System.Windows.Clipboard.SetText(StreamUrl);
         StatusMessage = "已複製 URL";
     }
 
