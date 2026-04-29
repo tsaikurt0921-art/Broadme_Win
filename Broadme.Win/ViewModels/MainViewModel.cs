@@ -235,7 +235,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var bounds = SystemInformation.VirtualScreen;
         var x = bounds.Left + (cmd.X * bounds.Width);
         var y = bounds.Top + (cmd.Y * bounds.Height);
-        var point = new Point(x - bounds.Left, y - bounds.Top);
+        var point = new System.Windows.Point(x - bounds.Left, y - bounds.Top);
 
         switch (cmd.Type)
         {
