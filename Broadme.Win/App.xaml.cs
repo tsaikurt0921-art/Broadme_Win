@@ -11,6 +11,9 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
+        // 暫時將關閉模式設為顯式，避免 LaunchWindow 關閉時導致程式退出
+        Current.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+
         var launch = new LaunchWindow();
         launch.Show();
         await Task.Delay(1500);
@@ -38,6 +41,9 @@ public partial class App : System.Windows.Application
                 return;
             }
         }
+
+        // 準備顯示主視窗前，將關閉模式改回 OnMainWindowClose
+        Current.ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
 
         var main = new MainWindow();
         main.Show();
