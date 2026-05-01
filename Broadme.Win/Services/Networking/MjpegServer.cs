@@ -44,7 +44,15 @@ public sealed class MjpegServer
             _listener.Prefixes.Add($"http://{normalized}:{port}/");
         }
 
-        _listener.Start();
+        try
+        {
+            _listener.Start();
+        }
+        catch (HttpListenerException ex) when (ex.ErrorCode == 5) // Access Denied
+        {
+            throw new HttpListenerException(ex.ErrorCode, "存取被拒絕。請嘗試以「系統管理員身分」執行此程式，或手動為此通訊埠註冊 URL ACL。");
+        }
+
         _cts = new CancellationTokenSource();
         _ = AcceptLoopAsync(_cts.Token);
     }

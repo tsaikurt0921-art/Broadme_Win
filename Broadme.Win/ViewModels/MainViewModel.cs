@@ -173,6 +173,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
+            // 嘗試自動設定防火牆規則
+            await FirewallService.EnsureFirewallRule(_config.StreamPort);
             _server.Start(_config.BindIp, _config.StreamPort);
         }
         catch (System.Net.HttpListenerException ex)
