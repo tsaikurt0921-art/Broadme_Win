@@ -186,17 +186,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
             IsStreaming = false;
             return;
         }
-        catch (Exception ex)
-        {
-            await _logger.LogAsync($"啟動廣播發生未知錯誤: {ex.Message}");
-            System.Windows.MessageBox.Show(
-                $"無法啟動網路廣播！\n\n未知錯誤: {ex.Message}",
-                "廣播啟動失敗",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            IsStreaming = false;
-            return;
-        }
 
         try
         {
