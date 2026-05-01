@@ -12,6 +12,7 @@ public sealed class MjpegServer
     private readonly object _lock = new();
     private readonly List<HttpListenerResponse> _streamClients = new();
     private readonly List<HttpListenerResponse> _controlStreamClients = new();
+    private readonly Dictionary<HttpListenerResponse, TaskCompletionSource> _clientLifecycles = new();
 
     private readonly ControlAuthManager _authManager;
     private readonly ControlPinManager _pinManager;
@@ -51,16 +52,18 @@ public sealed class MjpegServer
     public void Stop()
     {
         _cts?.Cancel();
+        
+        List<TaskCompletionSource> lifecycles;
         lock (_lock)
         {
-            foreach (var client in _streamClients.Concat(_controlStreamClients))
-            {
-                try { client.OutputStream.Close(); } catch { }
-            }
-            _streamClients.Clear();
-            _controlStreamClients.Clear();
-            ClientCountChanged?.Invoke(0);
+            lifecycles = _clientLifecycles.Values.ToList();
         }
+
+        foreach (var tcs in lifecycles)
+        {
+            tcs.TrySetResult();
+        }
+
         if (_listener.IsListening) _listener.Stop();
     }
 
@@ -89,11 +92,17 @@ public sealed class MjpegServer
             }
             catch
             {
+                TaskCompletionSource? tcs = null;
                 lock (_lock)
                 {
                     target.Remove(res);
-                    ClientCountChanged?.Invoke(_streamClients.Count);
+                    if (_clientLifecycles.TryGetValue(res, out tcs))
+                    {
+                        _clientLifecycles.Remove(res);
+                    }
+                    ClientCountChanged?.Invoke(_streamClients.Count + _controlStreamClients.Count);
                 }
+                tcs?.TrySetResult();
             }
         }
     }
@@ -119,14 +128,14 @@ public sealed class MjpegServer
             {
                 case "/":
                     ctx.Response.StatusCode = 302;
-                    ctx.Response.RedirectLocation = "/stream";
+                    ctx.Response.RedirectLocation = "/control";
                     ctx.Response.Close();
                     return;
                 case "/stream":
-                    AddStreamClient(ctx.Response, _streamClients);
+                    await HandleStreamClientAsync(ctx.Response, _streamClients);
                     return;
                 case "/stream-control":
-                    AddStreamClient(ctx.Response, _controlStreamClients);
+                    await HandleStreamClientAsync(ctx.Response, _controlStreamClients);
                     return;
                 case "/control":
                     await ServeControlPage(ctx.Response);
@@ -171,15 +180,34 @@ public sealed class MjpegServer
         ctx.Response.Close();
     }
 
-    private void AddStreamClient(HttpListenerResponse response, List<HttpListenerResponse> list)
+    private async Task HandleStreamClientAsync(HttpListenerResponse response, List<HttpListenerResponse> list)
     {
+        var tcs = new TaskCompletionSource();
+        
         response.StatusCode = 200;
         response.ContentType = "multipart/x-mixed-replace; boundary=frame";
         response.SendChunked = true;
+
         lock (_lock)
         {
             list.Add(response);
-            ClientCountChanged?.Invoke(_streamClients.Count);
+            _clientLifecycles[response] = tcs;
+            ClientCountChanged?.Invoke(_streamClients.Count + _controlStreamClients.Count);
+        }
+
+        try
+        {
+            await tcs.Task;
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                list.Remove(response);
+                _clientLifecycles.Remove(response);
+                ClientCountChanged?.Invoke(_streamClients.Count + _controlStreamClients.Count);
+            }
+            try { response.Close(); } catch { }
         }
     }
 

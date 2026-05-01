@@ -112,7 +112,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public int ClientCount
     {
         get => _clientCount;
-        set { _clientCount = value; OnPropertyChanged(); }
+        set 
+        { 
+            if (_clientCount != value)
+            {
+                _clientCount = value; 
+                OnPropertyChanged();
+                _ = _logger.LogAsync($"連線人數已變更: {value}");
+            }
+        }
     }
 
     public string StatusMessage
