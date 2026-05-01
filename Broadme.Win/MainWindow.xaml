@@ -6,11 +6,12 @@
         xmlns:vm="clr-namespace:Broadme.Win.ViewModels"
         mc:Ignorable="d"
         Title="Broadme"
-        Width="960"
-        Height="320"
+        Width="980"
+        Height="360"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="White"
+        Icon="/Assets/app-logo.ico"
         WindowStyle="SingleBorderWindow">
 
     <Window.DataContext>
@@ -18,6 +19,12 @@
     </Window.DataContext>
 
     <Window.Resources>
+        <!-- Colors -->
+        <SolidColorBrush x:Key="PrimaryPurple" Color="#8439B0" />
+        <SolidColorBrush x:Key="LightPurple" Color="#BFA6D5" />
+        <SolidColorBrush x:Key="TextGrey" Color="#9F8D9E" />
+        <SolidColorBrush x:Key="SubTextGrey" Color="#B8A4B3" />
+
         <LinearGradientBrush x:Key="StartBrush" StartPoint="0,0" EndPoint="0.7,1">
             <GradientStop Color="#8E5BDA" Offset="0.02" />
             <GradientStop Color="#AD6BE0" Offset="0.65" />
@@ -29,115 +36,200 @@
             <GradientStop Color="#DF4C9D" Offset="1" />
         </LinearGradientBrush>
 
-        <Style x:Key="OutlineBtn" TargetType="Button">
+        <!-- Rounded Button Style -->
+        <Style x:Key="MacButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="White" />
-            <Setter Property="Foreground" Value="#8439B0" />
-            <Setter Property="BorderBrush" Value="#BFA6D5" />
+            <Setter Property="Foreground" Value="{StaticResource PrimaryPurple}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LightPurple}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="16,4" />
+            <Setter Property="Padding" Value="20,6" />
             <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Height" Value="38" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="20">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="19">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
                         </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Rounded ComboBox Style -->
+        <Style x:Key="MacComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="{StaticResource LightPurple}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="border" 
+                                    Background="{TemplateBinding Background}" 
+                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                    BorderThickness="{TemplateBinding BorderThickness}" 
+                                    CornerRadius="19"/>
+                            <ToggleButton x:Name="ToggleButton" 
+                                          Grid.Column="2" 
+                                          Focusable="false"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Grid Background="Transparent">
+                                            <Path x:Name="Arrow" 
+                                                  Fill="{StaticResource PrimaryPurple}"
+                                                  HorizontalAlignment="Right" 
+                                                  VerticalAlignment="Center" 
+                                                  Margin="0,0,12,0"
+                                                  Data="M 0 0 L 4 4 L 8 0 Z" />
+                                        </Grid>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ContentSite" 
+                                              IsHitTestVisible="False" 
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              Margin="16,0,30,0"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left" />
+                            <Popup x:Name="Popup" 
+                                   Placement="Bottom" 
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" 
+                                   AllowsTransparency="True" 
+                                   Focusable="False" 
+                                   PopupAnimation="Slide">
+                                <Grid x:Name="DropDown" 
+                                      SnapsToDevicePixels="True" 
+                                      MinWidth="{TemplateBinding ActualWidth}" 
+                                      MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder" 
+                                            Background="White" 
+                                            BorderThickness="1" 
+                                            BorderBrush="{StaticResource LightPurple}"
+                                            CornerRadius="8" 
+                                            Margin="0,4,0,0">
+                                        <ScrollViewer SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="33,20,33,20">
+    <Grid Margin="40,30,40,25">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" /> <!-- Header -->
+            <RowDefinition Height="Auto" /> <!-- Status Bar -->
+            <RowDefinition Height="*" />    <!-- Controls -->
+            <RowDefinition Height="Auto" /> <!-- Footer -->
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0" LastChildFill="False">
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                <Image Source="/Assets/app-logo.png" Width="40" Height="40" Margin="0,0,12,0"/>
-                <TextBlock Text="Broadme" FontSize="32" FontWeight="Medium" Foreground="#8439B0" VerticalAlignment="Center" />
-                <Border Background="#8439B0" CornerRadius="10" Margin="8,0,0,0" Padding="8,3">
-                    <TextBlock Text="Beta" Foreground="White" FontSize="12" FontWeight="SemiBold" />
-                </Border>
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,25">
+            <Image Source="/Assets/app-logo.ico" Width="44" Height="44" Margin="0,0,15,0"/>
+            <TextBlock Text="Broadme" FontSize="36" FontWeight="Medium" Foreground="{StaticResource PrimaryPurple}" VerticalAlignment="Center" />
+            <Border Background="{StaticResource PrimaryPurple}" CornerRadius="11" Margin="12,0,0,0" Padding="10,4" VerticalAlignment="Center">
+                <TextBlock Text="Beta" Foreground="White" FontSize="13" FontWeight="SemiBold" />
+            </Border>
+        </StackPanel>
+
+        <!-- Status Bar -->
+        <Grid Grid.Row="1" Margin="0,0,0,30">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <TextBlock Text="Clients: " FontSize="28" Foreground="{StaticResource TextGrey}" />
+                <TextBlock Text="{Binding ClientCount}" FontSize="28" Foreground="{StaticResource TextGrey}" />
             </StackPanel>
-        </DockPanel>
 
-        <Grid Grid.Row="1" Margin="0,12,0,8">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <DockPanel Grid.Row="0" Margin="0,0,0,12">
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                    <TextBlock Text="Clients: " FontSize="24" Foreground="#9F8D9E" />
-                    <TextBlock Text="{Binding ClientCount}" FontSize="24" Foreground="#9F8D9E" />
-                </StackPanel>
-
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="IP: " FontSize="15" Foreground="#B8A4B3" />
-                    <TextBlock Text="{Binding CurrentIp}" FontSize="15" Foreground="#B8A4B3" />
-                    <TextBlock Text="  |  URL: " FontSize="15" Foreground="#B8A4B3" />
-                    <TextBlock Text="{Binding StreamUrl}" FontSize="15" Foreground="#B8A4B3" />
-                </StackPanel>
-            </DockPanel>
-
-        <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,8">
-            <Button Width="80" Height="31" Margin="4" Command="{Binding ToggleBroadcastCommand}" Foreground="White" BorderThickness="0">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Background" Value="{StaticResource StartBrush}"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border CornerRadius="20" Background="{TemplateBinding Background}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsStreaming}" Value="True">
-                                <Setter Property="Background" Value="{StaticResource StopBrush}"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-                <TextBlock Text="{Binding StartStopText}" Foreground="White" FontSize="16" FontWeight="Medium"/>
-            </Button>
-
-            <Button Width="100" Height="31" Margin="4" Command="{Binding CopyUrlCommand}" Style="{StaticResource OutlineBtn}" Content="複製URL" />
-            <Button Width="120" Height="31" Margin="4" Style="{StaticResource OutlineBtn}" Content="顯示QRCode" Command="{Binding ShowQrCommand}"/>
-            <Button Width="120" Height="31" Margin="4" Command="{Binding OpenControlAuthCommand}" Style="{StaticResource OutlineBtn}" Content="控制授權" />
-
-            <ComboBox Width="135" Height="31" Margin="4"
-                      ItemsSource="{Binding ResolutionOptions}"
-                      SelectedItem="{Binding SelectedResolution}"
-                      IsEnabled="{Binding IsNotStreaming}"/>
-
-            <ComboBox Width="100" Height="31" Margin="4"
-                      ItemsSource="{Binding FpsOptions}"
-                      SelectedItem="{Binding SelectedFps}"
-                      IsEnabled="{Binding IsNotStreaming}"/>
-
-            <ComboBox Width="200" Height="31" Margin="4"
-                      ItemsSource="{Binding NetworkInterfaces}"
-                      SelectedItem="{Binding SelectedInterface}"
-                      DisplayMemberPath="Label"
-                      IsEnabled="{Binding IsNotStreaming}"/>
-
-            <Button Width="110" Height="31" Margin="4" Style="{StaticResource OutlineBtn}" Content="效能日誌" Command="{Binding OpenLogCommand}"/>
-        </WrapPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,4">
+                <TextBlock Text="IP: " FontSize="16" Foreground="{StaticResource SubTextGrey}" />
+                <TextBlock Text="{Binding CurrentIp}" FontSize="16" Foreground="{StaticResource SubTextGrey}" />
+                <TextBlock Text="  |  URL: " FontSize="16" Foreground="{StaticResource SubTextGrey}" />
+                <TextBlock Text="{Binding StreamUrl}" FontSize="16" Foreground="{StaticResource SubTextGrey}" />
+            </StackPanel>
         </Grid>
 
-        <StackPanel Grid.Row="2" Orientation="Vertical" HorizontalAlignment="Center">
-            <TextBlock Text="{Binding StatusMessage}" Foreground="#B8A4B3" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+        <!-- Controls -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Main Actions -->
+            <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button Width="90" Margin="0,0,12,12" Command="{Binding ToggleBroadcastCommand}" Foreground="White" BorderThickness="0">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="{StaticResource StartBrush}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border CornerRadius="19" Background="{TemplateBinding Background}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsStreaming}" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource StopBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock Text="{Binding StartStopText}" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                </Button>
+
+                <Button Content="複製URL" Margin="0,0,12,12" Style="{StaticResource MacButtonStyle}" Command="{Binding CopyUrlCommand}" />
+                <Button Content="顯示QRCode" Margin="0,0,12,12" Style="{StaticResource MacButtonStyle}" Command="{Binding ShowQrCommand}" />
+                <Button Content="控制授權" Margin="0,0,12,12" Style="{StaticResource MacButtonStyle}" Command="{Binding OpenControlAuthCommand}" />
+                
+                <ComboBox Width="145" Margin="0,0,12,12" Style="{StaticResource MacComboBoxStyle}"
+                          ItemsSource="{Binding ResolutionOptions}"
+                          SelectedItem="{Binding SelectedResolution}"
+                          IsEnabled="{Binding IsNotStreaming}"/>
+
+                <ComboBox Width="110" Margin="0,0,12,12" Style="{StaticResource MacComboBoxStyle}"
+                          ItemsSource="{Binding FpsOptions}"
+                          SelectedItem="{Binding SelectedFps}"
+                          IsEnabled="{Binding IsNotStreaming}"
+                          ItemStringFormat="{}{0} FPS"/>
+            </WrapPanel>
+
+            <!-- Secondary Actions (Right Aligned) -->
+            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right" VerticalAlignment="Top">
+                <ComboBox Width="160" Margin="0,0,0,12" Style="{StaticResource MacComboBoxStyle}"
+                          ItemsSource="{Binding NetworkInterfaces}"
+                          SelectedItem="{Binding SelectedInterface}"
+                          DisplayMemberPath="Name" 
+                          IsEnabled="{Binding IsNotStreaming}"/>
+                
+                <Button Content="效能日誌" Style="{StaticResource MacButtonStyle}" Command="{Binding OpenLogCommand}" HorizontalAlignment="Stretch" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="3" Margin="0,20,0,0">
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource SubTextGrey}" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,8"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="©廣臻科技版權所有 | " Foreground="#B8A4B3" FontSize="15" />
-                <TextBlock Text="官方LINE" Foreground="#8439B0" FontSize="15" TextDecorations="Underline" />
+                <TextBlock Text="©廣臻科技版權所有 | " Foreground="{StaticResource SubTextGrey}" FontSize="14" />
+                <TextBlock Text="官方LINE" Foreground="{StaticResource PrimaryPurple}" FontSize="14" TextDecorations="Underline" Cursor="Hand" />
             </StackPanel>
         </StackPanel>
     </Grid>

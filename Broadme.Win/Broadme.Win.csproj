@@ -8,6 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Broadme.Win</AssemblyName>
     <RootNamespace>Broadme.Win</RootNamespace>
+    <ApplicationIcon>Assets\app-logo.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +19,6 @@
     <Content Include="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Resource Include="Assets\app-logo.png" />
-    <Resource Include="Assets\close-btn.png" />
+    <Resource Include="Assets\**\*" />
   </ItemGroup>
 </Project>
