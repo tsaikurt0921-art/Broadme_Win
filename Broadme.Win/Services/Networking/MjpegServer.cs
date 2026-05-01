@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Broadme.Win.Services.Auth;
@@ -8,12 +9,10 @@ namespace Broadme.Win.Services.Networking;
 
 public sealed class MjpegServer
 {
-    private readonly HttpListener _listener = new();
+    private TcpListener? _listener;
     private readonly object _lock = new();
-    private readonly List<HttpListenerResponse> _streamClients = new();
-    private readonly List<HttpListenerResponse> _controlStreamClients = new();
-    private readonly Dictionary<HttpListenerResponse, TaskCompletionSource> _clientLifecycles = new();
-
+    private readonly List<StreamClient> _clients = new();
+    
     private readonly ControlAuthManager _authManager;
     private readonly ControlPinManager _pinManager;
     private readonly SessionManager _sessionManager;
@@ -32,222 +31,236 @@ public sealed class MjpegServer
 
     public void Start(string bindIp, int port)
     {
-        if (_listener.IsListening) return;
-
-        var normalized = string.IsNullOrWhiteSpace(bindIp) ? "0.0.0.0" : bindIp.Trim();
-        if (normalized == "0.0.0.0" || normalized == "*" || normalized == "+")
-        {
-            _listener.Prefixes.Add($"http://+:{port}/");
-        }
-        else
-        {
-            _listener.Prefixes.Add($"http://{normalized}:{port}/");
-        }
+        if (_listener != null) return;
 
         try
         {
-            _listener.Start();
-        }
-        catch (HttpListenerException ex) when (ex.ErrorCode == 5) // Access Denied
-        {
-            throw new HttpListenerException(ex.ErrorCode, "存取被拒絕。請嘗試以「系統管理員身分」執行此程式，或手動為此通訊埠註冊 URL ACL。");
-        }
+            var ip = string.IsNullOrWhiteSpace(bindIp) || bindIp == "0.0.0.0" 
+                ? IPAddress.Any 
+                : IPAddress.Parse(bindIp);
 
-        _cts = new CancellationTokenSource();
-        _ = AcceptLoopAsync(_cts.Token);
+            _listener = new TcpListener(ip, port);
+            _listener.Start();
+            
+            _cts = new CancellationTokenSource();
+            _ = AcceptLoopAsync(_cts.Token);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"無法啟動網路伺服器: {ex.Message}。請確認通訊埠 {port} 未被佔用。", ex);
+        }
     }
 
     public void Stop()
     {
         _cts?.Cancel();
-        
-        List<TaskCompletionSource> lifecycles;
+        try { _listener?.Stop(); } catch { }
+        _listener = null;
+
         lock (_lock)
         {
-            lifecycles = _clientLifecycles.Values.ToList();
+            foreach (var client in _clients)
+            {
+                try { client.Stream.Close(); } catch { }
+                try { client.Tcp.Close(); } catch { }
+            }
+            _clients.Clear();
+            ClientCountChanged?.Invoke(0);
         }
-
-        foreach (var tcs in lifecycles)
-        {
-            tcs.TrySetResult();
-        }
-
-        if (_listener.IsListening) _listener.Stop();
     }
 
     public async Task PushFrameAsync(byte[] jpeg)
     {
-        await PushToClientsAsync(jpeg, _streamClients);
-        await PushToClientsAsync(jpeg, _controlStreamClients);
-    }
+        List<StreamClient> snapshot;
+        lock (_lock) snapshot = _clients.ToList();
 
-    private async Task PushToClientsAsync(byte[] jpeg, List<HttpListenerResponse> target)
-    {
-        List<HttpListenerResponse> snapshot;
-        lock (_lock) snapshot = target.ToList();
+        if (snapshot.Count == 0) return;
 
         var header = Encoding.ASCII.GetBytes($"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {jpeg.Length}\r\n\r\n");
         var tail = Encoding.ASCII.GetBytes("\r\n");
 
-        foreach (var res in snapshot)
+        var tasks = snapshot.Select(async client =>
         {
             try
             {
-                await res.OutputStream.WriteAsync(header);
-                await res.OutputStream.WriteAsync(jpeg);
-                await res.OutputStream.WriteAsync(tail);
-                await res.OutputStream.FlushAsync();
+                await client.Stream.WriteAsync(header);
+                await client.Stream.WriteAsync(jpeg);
+                await client.Stream.WriteAsync(tail);
+                await client.Stream.FlushAsync();
             }
             catch
             {
-                TaskCompletionSource? tcs = null;
                 lock (_lock)
                 {
-                    target.Remove(res);
-                    if (_clientLifecycles.TryGetValue(res, out tcs))
+                    if (_clients.Remove(client))
                     {
-                        _clientLifecycles.Remove(res);
+                        ClientCountChanged?.Invoke(_clients.Count);
                     }
-                    ClientCountChanged?.Invoke(_streamClients.Count + _controlStreamClients.Count);
                 }
-                tcs?.TrySetResult();
+                try { client.Tcp.Close(); } catch { }
             }
-        }
+        });
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task AcceptLoopAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
-            HttpListenerContext ctx;
-            try { ctx = await _listener.GetContextAsync(); }
+            try
+            {
+                var client = await _listener!.AcceptTcpClientAsync(ct);
+                _ = HandleClientAsync(client, ct);
+            }
             catch { break; }
-            _ = HandleContextAsync(ctx);
         }
     }
 
-    private async Task HandleContextAsync(HttpListenerContext ctx)
+    private async Task HandleClientAsync(TcpClient tcp, CancellationToken ct)
     {
-        var path = ctx.Request.Url?.AbsolutePath ?? "/";
-
-        if (ctx.Request.HttpMethod == "GET")
+        try
         {
-            switch (path)
+            using (tcp)
+            using (var stream = tcp.GetStream())
             {
-                case "/":
-                    ctx.Response.StatusCode = 302;
-                    ctx.Response.RedirectLocation = "/control";
-                    ctx.Response.Close();
-                    return;
-                case "/stream":
-                    await HandleStreamClientAsync(ctx.Response, _streamClients);
-                    return;
-                case "/stream-control":
-                    await HandleStreamClientAsync(ctx.Response, _controlStreamClients);
-                    return;
-                case "/control":
-                    await ServeControlPage(ctx.Response);
-                    return;
-                case "/apple-touch-icon.png":
-                    ctx.Response.StatusCode = 404;
-                    ctx.Response.Close();
-                    return;
-                default:
-                    ctx.Response.StatusCode = 404;
-                    ctx.Response.Close();
-                    return;
+                // 讀取請求行 (e.g. GET /control HTTP/1.1)
+                var requestLine = await ReadLineAsync(stream, ct);
+                if (string.IsNullOrWhiteSpace(requestLine)) return;
+
+                var parts = requestLine.Split(' ');
+                if (parts.Length < 2) return;
+
+                var method = parts[0].ToUpperInvariant();
+                var url = parts[1];
+                var path = url.Split('?')[0];
+
+                // 讀取標頭
+                var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                while (true)
+                {
+                    var headerLine = await ReadLineAsync(stream, ct);
+                    if (string.IsNullOrWhiteSpace(headerLine)) break;
+                    var hParts = headerLine.Split(':', 2);
+                    if (hParts.Length == 2) headers[hParts[0].Trim()] = hParts[1].Trim();
+                }
+
+                if (method == "GET")
+                {
+                    switch (path)
+                    {
+                        case "/":
+                        case "/index.html":
+                            await SendRedirect(stream, "/control");
+                            break;
+                        case "/stream":
+                        case "/stream-control":
+                            await HandleMjpegStream(tcp, stream);
+                            break;
+                        case "/control":
+                            await ServeStaticFile(stream, "control.html", "text/html");
+                            break;
+                        default:
+                            await SendStatus(stream, 404, "Not Found");
+                            break;
+                    }
+                }
+                else if (method == "POST")
+                {
+                    // 讀取 Body
+                    long contentLength = 0;
+                    if (headers.TryGetValue("Content-Length", out var clStr)) long.TryParse(clStr, out contentLength);
+
+                    byte[] body = Array.Empty<byte>();
+                    if (contentLength > 0)
+                    {
+                        body = new byte[contentLength];
+                        int totalRead = 0;
+                        while (totalRead < contentLength)
+                        {
+                            int r = await stream.ReadAsync(body, totalRead, (int)(contentLength - totalRead), ct);
+                            if (r <= 0) break;
+                            totalRead += r;
+                        }
+                    }
+
+                    switch (path)
+                    {
+                        case "/api/auth/pin":
+                            await HandlePinAuth(stream, body);
+                            break;
+                        case "/api/input":
+                            await HandleInput(stream, body);
+                            break;
+                        case "/api/control/check":
+                            await HandleControlCheck(stream, body);
+                            break;
+                        case "/api/control/revoke":
+                            await HandleControlRevoke(stream, body);
+                            break;
+                        case "/api/upload-photo":
+                            await HandleUploadPhoto(stream, body);
+                            break;
+                        default:
+                            await SendJson(stream, 404, new { success = false, error = "Not Found" });
+                            break;
+                    }
+                }
+                else
+                {
+                    await SendStatus(stream, 405, "Method Not Allowed");
+                }
             }
         }
-
-        if (ctx.Request.HttpMethod == "POST")
+        catch (Exception ex)
         {
-            switch (path)
-            {
-                case "/api/auth/pin":
-                    await HandlePinAuth(ctx);
-                    return;
-                case "/api/input":
-                    await HandleInput(ctx);
-                    return;
-                case "/api/control/check":
-                    await HandleControlCheck(ctx);
-                    return;
-                case "/api/control/revoke":
-                    await HandleControlRevoke(ctx);
-                    return;
-                case "/api/upload-photo":
-                    await HandleUploadPhoto(ctx);
-                    return;
-                default:
-                    await WriteJson(ctx.Response, 404, new { success = false, error = "Not Found" });
-                    return;
-            }
+            System.Diagnostics.Debug.WriteLine($"Client handling error: {ex.Message}");
         }
-
-        ctx.Response.StatusCode = 405;
-        ctx.Response.Close();
     }
 
-    private async Task HandleStreamClientAsync(HttpListenerResponse response, List<HttpListenerResponse> list)
+    private async Task HandleMjpegStream(TcpClient tcp, NetworkStream stream)
     {
-        var tcs = new TaskCompletionSource();
+        var header = "HTTP/1.1 200 OK\r\n" +
+                     "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n" +
+                     "Cache-Control: no-cache, no-store, must-revalidate\r\n" +
+                     "Connection: keep-alive\r\n\r\n";
         
-        response.StatusCode = 200;
-        response.ContentType = "multipart/x-mixed-replace; boundary=frame";
-        response.SendChunked = true;
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(header));
+        await stream.FlushAsync();
 
+        var client = new StreamClient(tcp, stream);
         lock (_lock)
         {
-            list.Add(response);
-            _clientLifecycles[response] = tcs;
-            ClientCountChanged?.Invoke(_streamClients.Count + _controlStreamClients.Count);
+            _clients.Add(client);
+            ClientCountChanged?.Invoke(_clients.Count);
         }
 
-        try
+        // 保持連線開啟，直到客戶端斷開或伺服器停止
+        var tcs = new TaskCompletionSource();
+        using (_cts?.Token.Register(() => tcs.TrySetResult()))
         {
             await tcs.Task;
         }
-        finally
-        {
-            lock (_lock)
-            {
-                list.Remove(response);
-                _clientLifecycles.Remove(response);
-                ClientCountChanged?.Invoke(_streamClients.Count + _controlStreamClients.Count);
-            }
-            try { response.Close(); } catch { }
-        }
     }
 
-    private async Task ServeControlPage(HttpListenerResponse response)
+    private async Task HandlePinAuth(NetworkStream stream, byte[] body)
     {
-        var htmlPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", "control.html");
-        var html = File.Exists(htmlPath) ? await File.ReadAllTextAsync(htmlPath) : "<h1>Broadme control page missing</h1>";
-        var bytes = Encoding.UTF8.GetBytes(html);
-        response.ContentType = "text/html; charset=utf-8";
-        response.ContentLength64 = bytes.Length;
-        await response.OutputStream.WriteAsync(bytes);
-        response.Close();
-    }
-
-    private async Task HandlePinAuth(HttpListenerContext ctx)
-    {
-        var req = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(ctx.Request.InputStream);
+        var req = body.Length > 0 ? JsonSerializer.Deserialize<Dictionary<string, string>>(body) : null;
         var pin = req != null && req.TryGetValue("pin", out var p) ? p : string.Empty;
 
         if (!_pinManager.Validate(pin ?? string.Empty))
         {
-            await WriteJson(ctx.Response, 401, new { success = false, error = "PIN 碼錯誤或已過期" });
+            await SendJson(stream, 401, new { success = false, error = "PIN 碼錯誤或已過期" });
             return;
         }
 
         var token = _sessionManager.CreateSession();
-        await WriteJson(ctx.Response, 200, new { success = true, token, message = "驗證成功", expires_in = 600 });
+        await SendJson(stream, 200, new { success = true, token, message = "驗證成功", expires_in = 600 });
     }
 
-    private async Task HandleControlCheck(HttpListenerContext ctx)
+    private async Task HandleControlCheck(NetworkStream stream, byte[] body)
     {
-        var req = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(ctx.Request.InputStream);
+        var req = body.Length > 0 ? JsonSerializer.Deserialize<Dictionary<string, string>>(body) : null;
         var pin = req != null && req.TryGetValue("controlPin", out var p) ? p : string.Empty;
 
         if (_authManager.IsAuthorized(pin ?? string.Empty))
@@ -259,32 +272,38 @@ public sealed class MjpegServer
                 _authManager.BindToken(pin ?? string.Empty, token);
             }
 
-            await WriteJson(ctx.Response, 200, new { success = true, authorized = true, anyoneAuthorized = true, token });
+            await SendJson(stream, 200, new { success = true, authorized = true, anyoneAuthorized = true, token });
             return;
         }
 
         var anyone = _authManager.HasAnyAuthorization();
-        await WriteJson(ctx.Response, 200, new { success = true, authorized = false, anyoneAuthorized = anyone });
+        await SendJson(stream, 200, new { success = true, authorized = false, anyoneAuthorized = anyone });
     }
 
-    private async Task HandleControlRevoke(HttpListenerContext ctx)
+    private async Task HandleControlRevoke(NetworkStream stream, byte[] body)
     {
-        var req = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(ctx.Request.InputStream);
+        var req = body.Length > 0 ? JsonSerializer.Deserialize<Dictionary<string, string>>(body) : null;
         var token = req != null && req.TryGetValue("token", out var t) ? t : string.Empty;
         _sessionManager.EndSession(token ?? string.Empty);
         _authManager.RevokeByToken(token ?? string.Empty);
-        await WriteJson(ctx.Response, 200, new { success = true, message = "已撤銷授權" });
+        await SendJson(stream, 200, new { success = true, message = "已撤銷授權" });
     }
 
-    private async Task HandleInput(HttpListenerContext ctx)
+    private async Task HandleInput(NetworkStream stream, byte[] body)
     {
-        using var doc = await JsonDocument.ParseAsync(ctx.Request.InputStream);
+        if (body.Length == 0)
+        {
+            await SendJson(stream, 400, new { success = false, error = "Bad Request" });
+            return;
+        }
+
+        using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
         var token = root.TryGetProperty("token", out var t) ? t.GetString() : null;
         if (!_sessionManager.ValidateAndExtend(token ?? string.Empty))
         {
-            await WriteJson(ctx.Response, 401, new { success = false, error = "Token 無效", require_reauth = true });
+            await SendJson(stream, 401, new { success = false, error = "Token 無效", require_reauth = true });
             return;
         }
 
@@ -301,28 +320,75 @@ public sealed class MjpegServer
         };
 
         ControlCommandReceived?.Invoke(cmd);
-        await WriteJson(ctx.Response, 200, new { success = true });
+        await SendJson(stream, 200, new { success = true });
     }
 
-    private async Task HandleUploadPhoto(HttpListenerContext ctx)
+    private async Task HandleUploadPhoto(NetworkStream stream, byte[] body)
     {
-        using var ms = new MemoryStream();
-        await ctx.Request.InputStream.CopyToAsync(ms);
-        var data = ms.ToArray();
-        PhotoUploaded?.Invoke(data);
-        await WriteJson(ctx.Response, 200, new { success = true });
+        PhotoUploaded?.Invoke(body);
+        await SendJson(stream, 200, new { success = true });
     }
 
-    private static async Task WriteJson(HttpListenerResponse response, int statusCode, object payload)
+    private async Task ServeStaticFile(NetworkStream stream, string fileName, string contentType)
     {
-        response.StatusCode = statusCode;
-        response.ContentType = "application/json; charset=utf-8";
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
-        response.ContentLength64 = bytes.Length;
-        await response.OutputStream.WriteAsync(bytes);
-        response.Close();
+        var htmlPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", fileName);
+        byte[] content;
+        if (File.Exists(htmlPath))
+        {
+            content = await File.ReadAllBytesAsync(htmlPath);
+        }
+        else
+        {
+            content = Encoding.UTF8.GetBytes($"<h1>Broadme file {fileName} missing</h1>");
+        }
+
+        var header = $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}\r\nContent-Length: {content.Length}\r\nConnection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(header));
+        await stream.WriteAsync(content);
+        await stream.FlushAsync();
+    }
+
+    private async Task SendRedirect(NetworkStream stream, string location)
+    {
+        var header = $"HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(header));
+        await stream.FlushAsync();
+    }
+
+    private async Task SendStatus(NetworkStream stream, int code, string message)
+    {
+        var header = $"HTTP/1.1 {code} {message}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(header));
+        await stream.FlushAsync();
+    }
+
+    private async Task SendJson(NetworkStream stream, int code, object payload)
+    {
+        var json = JsonSerializer.Serialize(payload);
+        var content = Encoding.UTF8.GetBytes(json);
+        var header = $"HTTP/1.1 {code} {(code == 200 ? "OK" : "Error")}\r\nContent-Type: application/json\r\nContent-Length: {content.Length}\r\nConnection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(header));
+        await stream.WriteAsync(content);
+        await stream.FlushAsync();
+    }
+
+    private async Task<string> ReadLineAsync(NetworkStream stream, CancellationToken ct)
+    {
+        var line = new StringBuilder();
+        var buffer = new byte[1];
+        while (true)
+        {
+            int read = await stream.ReadAsync(buffer, 0, 1, ct);
+            if (read <= 0) break;
+            char c = (char)buffer[0];
+            if (c == '\n') break;
+            if (c != '\r') line.Append(c);
+        }
+        return line.ToString();
     }
 }
+
+internal record StreamClient(TcpClient Tcp, NetworkStream Stream);
 
 public sealed class ControlCommand
 {

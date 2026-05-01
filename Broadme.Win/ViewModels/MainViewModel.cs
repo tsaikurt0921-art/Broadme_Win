@@ -173,15 +173,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            // 嘗試自動設定防火牆規則
-            await FirewallService.EnsureFirewallRule(_config.StreamPort);
             _server.Start(_config.BindIp, _config.StreamPort);
         }
-        catch (System.Net.HttpListenerException ex)
+        catch (Exception ex)
         {
             await _logger.LogAsync($"啟動廣播失敗: {ex.Message}");
             System.Windows.MessageBox.Show(
-                $"無法啟動網路廣播！\n\n原因: {ex.Message}\n\n請嘗試：\n1. 以「系統管理員身分」重新開啟 Broadme\n2. 確認通訊埠 {_config.StreamPort} 沒有被其他程式佔用。",
+                $"無法啟動網路廣播！\n\n原因: {ex.Message}\n\n請確認通訊埠 {_config.StreamPort} 沒有被其他程式佔用。",
                 "廣播啟動失敗",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
