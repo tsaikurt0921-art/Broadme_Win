@@ -85,7 +85,7 @@ public sealed class SerialManager
         }
         catch
         {
-            return (false, "連線失敗,請檢查網路後重試");
+            return (false, "序號驗證服務暫時無法連線，請稍後再試");
         }
     }
 

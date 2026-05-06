@@ -3,6 +3,7 @@ namespace Broadme.Win.Models;
 public sealed class ApiSettings
 {
     public string BaseUrl { get; set; } = "https://api.broadme.io";
+    public List<string> FallbackBaseUrls { get; set; } = new() { "http://57.181.68.103" };
 }
 
 public sealed class ValidateSerialApiRequest
