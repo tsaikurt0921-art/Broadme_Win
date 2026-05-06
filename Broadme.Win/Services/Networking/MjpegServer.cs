@@ -9,6 +9,10 @@ namespace Broadme.Win.Services.Networking;
 
 public sealed class MjpegServer
 {
+    private const long MaxUploadBytes = 10 * 1024 * 1024;
+    private const int PinFailLimit = 5;
+    private static readonly TimeSpan PinLockDuration = TimeSpan.FromSeconds(60);
+
     private TcpListener? _listener;
     private readonly object _lock = new();
     private readonly List<StreamClient> _clients = new();
@@ -16,6 +20,7 @@ public sealed class MjpegServer
     private readonly ControlAuthManager _authManager;
     private readonly ControlPinManager _pinManager;
     private readonly SessionManager _sessionManager;
+    private readonly Dictionary<string, (int Count, DateTimeOffset LockUntil)> _pinFailures = new();
     private CancellationTokenSource? _cts;
 
     public event Action<int>? ClientCountChanged;
@@ -174,7 +179,18 @@ public sealed class MjpegServer
                     byte[] body = Array.Empty<byte>();
                     if (contentLength > 0)
                     {
-                        body = new byte[contentLength];
+                        if (contentLength > MaxUploadBytes)
+                        {
+                            await SendJson(stream, 413, new { success = false, error = "檔案過大，上限 10 MB" });
+                            return;
+                        }
+                        if (contentLength > int.MaxValue)
+                        {
+                            await SendJson(stream, 413, new { success = false, error = "檔案過大" });
+                            return;
+                        }
+
+                        body = new byte[(int)contentLength];
                         int totalRead = 0;
                         while (totalRead < contentLength)
                         {
@@ -187,7 +203,7 @@ public sealed class MjpegServer
                     switch (path)
                     {
                         case "/api/auth/pin":
-                            await HandlePinAuth(stream, body);
+                            await HandlePinAuth(stream, body, GetRemoteIp(tcp));
                             break;
                         case "/api/input":
                             await HandleInput(stream, body);
@@ -243,17 +259,25 @@ public sealed class MjpegServer
         }
     }
 
-    private async Task HandlePinAuth(NetworkStream stream, byte[] body)
+    private async Task HandlePinAuth(NetworkStream stream, byte[] body, string remoteIp)
     {
+        if (IsRateLimited(remoteIp))
+        {
+            await SendJson(stream, 429, new { success = false, error = "PIN 嘗試過於頻繁，請稍後再試" });
+            return;
+        }
+
         var req = body.Length > 0 ? JsonSerializer.Deserialize<Dictionary<string, string>>(body) : null;
         var pin = req != null && req.TryGetValue("pin", out var p) ? p : string.Empty;
 
         if (!_pinManager.Validate(pin ?? string.Empty))
         {
+            RegisterPinFailure(remoteIp);
             await SendJson(stream, 401, new { success = false, error = "PIN 碼錯誤或已過期" });
             return;
         }
 
+        ClearPinFailure(remoteIp);
         var token = _sessionManager.CreateSession();
         await SendJson(stream, 200, new { success = true, token, message = "驗證成功", expires_in = 600 });
     }
@@ -325,8 +349,54 @@ public sealed class MjpegServer
 
     private async Task HandleUploadPhoto(NetworkStream stream, byte[] body)
     {
+        if (body.Length > MaxUploadBytes)
+        {
+            await SendJson(stream, 413, new { success = false, error = "檔案過大，上限 10 MB" });
+            return;
+        }
+
         PhotoUploaded?.Invoke(body);
         await SendJson(stream, 200, new { success = true });
+    }
+
+    private static string GetRemoteIp(TcpClient tcp)
+    {
+        if (tcp.Client.RemoteEndPoint is IPEndPoint ep) return ep.Address.ToString();
+        return "unknown";
+    }
+
+    private bool IsRateLimited(string ip)
+    {
+        lock (_pinFailures)
+        {
+            if (!_pinFailures.TryGetValue(ip, out var rec)) return false;
+            return DateTimeOffset.UtcNow < rec.LockUntil;
+        }
+    }
+
+    private void RegisterPinFailure(string ip)
+    {
+        lock (_pinFailures)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (!_pinFailures.TryGetValue(ip, out var rec))
+            {
+                _pinFailures[ip] = (1, DateTimeOffset.MinValue);
+                return;
+            }
+
+            var count = rec.Count + 1;
+            var lockUntil = count >= PinFailLimit ? now.Add(PinLockDuration) : rec.LockUntil;
+            _pinFailures[ip] = (count, lockUntil);
+        }
+    }
+
+    private void ClearPinFailure(string ip)
+    {
+        lock (_pinFailures)
+        {
+            _pinFailures.Remove(ip);
+        }
     }
 
     private async Task ServeStaticFile(NetworkStream stream, string fileName, string contentType)

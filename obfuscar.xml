@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<Obfuscator>
+  <Var name="InPath" value="release/win-x64" />
+  <Var name="OutPath" value="release/win-x64-obfuscated" />
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="ReuseNames" value="false" />
+  <Var name="UseUnicodeNames" value="false" />
+  <Var name="XmlMapping" value="true" />
+
+  <Module file="$(InPath)/Broadme.Win.dll" />
+</Obfuscator>

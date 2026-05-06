@@ -229,7 +229,7 @@
             <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource SubTextGrey}" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,8"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <TextBlock Text="©廣臻科技版權所有 | " Foreground="{StaticResource SubTextGrey}" FontSize="14" />
-                <TextBlock Text="官方LINE" Foreground="{StaticResource PrimaryPurple}" FontSize="14" TextDecorations="Underline" Cursor="Hand" />
+                <TextBlock Text="官方LINE" Foreground="{StaticResource PrimaryPurple}" FontSize="14" TextDecorations="Underline" Cursor="Hand" MouseLeftButtonDown="OpenLineClick" />
             </StackPanel>
         </StackPanel>
     </Grid>

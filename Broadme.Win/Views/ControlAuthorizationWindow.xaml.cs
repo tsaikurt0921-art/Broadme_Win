@@ -1,7 +1,4 @@
 using System.IO;
-using System.Net;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,10 +14,12 @@ public partial class ControlAuthorizationWindow : Window
     private readonly Action<string> _onAuthorize;
     private static readonly Regex NumberRegex = new("^[0-9]$");
     private readonly string _controlUrl;
+    private readonly string _selectedIp;
 
-    public ControlAuthorizationWindow(Action<string> onAuthorize, int port = 8080)
+    public ControlAuthorizationWindow(Action<string> onAuthorize, int port = 8080, string? selectedIp = null)
     {
         _onAuthorize = onAuthorize;
+        _selectedIp = string.IsNullOrWhiteSpace(selectedIp) ? "localhost" : selectedIp;
         _controlUrl = BuildControlUrl(port);
 
         InitializeComponent();
@@ -101,29 +100,8 @@ public partial class ControlAuthorizationWindow : Window
         return image;
     }
 
-    private static string BuildControlUrl(int port)
+    private string BuildControlUrl(int port)
     {
-        var ip = GetLocalIPv4() ?? "localhost";
-        return $"http://{ip}:{port}/control";
-    }
-
-    private static string? GetLocalIPv4()
-    {
-        foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
-        {
-            if (ni.OperationalStatus != OperationalStatus.Up) continue;
-            if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
-
-            var props = ni.GetIPProperties();
-            foreach (var ua in props.UnicastAddresses)
-            {
-                if (ua.Address.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    var ip = ua.Address.ToString();
-                    if (!ip.StartsWith("169.254.")) return ip;
-                }
-            }
-        }
-        return null;
+        return $"http://{_selectedIp}:{port}/control";
     }
 }

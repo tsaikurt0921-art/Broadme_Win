@@ -9,8 +9,12 @@ public sealed class BroadmeLogger
 
     public BroadmeLogger()
     {
-        var dir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        _path = Path.Combine(dir, "Broadme_Performance_Win.log");
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BroadmeWin",
+            "logs");
+        Directory.CreateDirectory(dir);
+        _path = Path.Combine(dir, "broadme.log");
     }
 
     public async Task LogAsync(string message)

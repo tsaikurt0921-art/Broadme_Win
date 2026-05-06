@@ -726,8 +726,12 @@
         let ctx = null;                 // 2D 畫布繪圖上下文
         let canvas = null;              // 本地繪圖畫布元素
         let isScrolling = false;        // 標記目前是否正處於捲動手勢狀態
+        let isLocked = false;           // 鎖定模式：阻擋輸入事件
         let lastAnnotationTime = 0;     // 🚩 用於繪圖指令節流的最後發送時間
         let lastPosX = 0, lastPosY = 0; // 捲動計算用的起始點座標
+        let strokeHistory = [];         // 本地筆跡歷史（Undo）
+        let redoHistory = [];           // 本地重做歷史（Redo）
+        let currentLocalStroke = null;  // 目前正在畫的筆劃
         
         // ==================== 2. 頁面生命週期處理 ====================
         
@@ -853,7 +857,7 @@
                     console.log('授權成功! 準備顯示開始按鈕');
                     stopPolling();
                     token = data.token;
-                    localStorage.setItem('broadme_control_token', token);
+                    sessionStorage.setItem('broadme_control_token', token);
                     
                     // 🚩 不直接進入控制頁面，改為顯示「點擊進入全螢幕」的啟動畫面
                     showSuccessOverlay(); 
@@ -963,9 +967,10 @@
             canvas.width = canvas.offsetWidth * window.devicePixelRatio;
             canvas.height = canvas.offsetHeight * window.devicePixelRatio;
             if (ctx) {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
                 ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
             }
-            clearLocalCanvas();
+            redrawLocalCanvas();
         }
         
         /**
@@ -974,6 +979,32 @@
         function clearLocalCanvas() {
             if (!ctx || !canvas) return;
             ctx.clearRect(0, 0, canvas.width / window.devicePixelRatio, canvas.height / window.devicePixelRatio);
+        }
+
+        function redrawLocalCanvas() {
+            clearLocalCanvas();
+            if (!ctx) return;
+            strokeHistory.forEach((stroke) => {
+                if (!stroke.points || stroke.points.length < 2) return;
+                ctx.beginPath();
+                ctx.strokeStyle = stroke.color;
+                ctx.lineWidth = stroke.width;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                for (let i = 1; i < stroke.points.length; i++) {
+                    ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                }
+                ctx.stroke();
+                ctx.closePath();
+            });
+        }
+
+        function resetLocalStrokes() {
+            strokeHistory = [];
+            redoHistory = [];
+            currentLocalStroke = null;
+            clearLocalCanvas();
         }
         
         // ==================== 6. 影像串流加載 ====================
@@ -1112,6 +1143,14 @@
                     
                     const clientX = e.clientX || (e.touches && e.touches[0].clientX);
                     const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                    const localX = clientX - rect.left;
+                    const localY = clientY - rect.top;
+                    currentLocalStroke = {
+                        color: drawColor,
+                        width: drawSize,
+                        points: [{ x: localX, y: localY }]
+                    };
+                    redoHistory = [];
                     
                     if (ctx) {
                         ctx.beginPath();
@@ -1119,7 +1158,7 @@
                         ctx.lineWidth = drawSize;
                         ctx.lineCap = 'round';
                         ctx.lineJoin = 'round';
-                        ctx.moveTo(clientX - rect.left, clientY - rect.top);
+                        ctx.moveTo(localX, localY);
                     }
                 } else if (currentMode === 'mouse') {
                     const now = Date.now();
@@ -1156,8 +1195,11 @@
                         const rect = streamImg.getBoundingClientRect();
                         const clientX = e.clientX || (e.touches && e.touches[0].clientX);
                         const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-                        ctx.lineTo(clientX - rect.left, clientY - rect.top);
+                        const localX = clientX - rect.left;
+                        const localY = clientY - rect.top;
+                        ctx.lineTo(localX, localY);
                         ctx.stroke();
+                        if (currentLocalStroke) currentLocalStroke.points.push({ x: localX, y: localY });
                     }
                 } else if (currentMode === 'mouse') {
                     sendControl('move', pos.x, pos.y);
@@ -1189,6 +1231,10 @@
                     if (ctx) {
                         ctx.closePath();
                     }
+                    if (currentLocalStroke) {
+                        strokeHistory.push(currentLocalStroke);
+                        currentLocalStroke = null;
+                    }
                     
                     // 🚩 停止自動清除本地畫布，讓筆跡留著
                      if (localClearTimer) clearTimeout(localClearTimer);
@@ -1204,6 +1250,7 @@
                 if (currentMode === 'draw' && isDrawing) {
                     isDrawing = false;
                     sendControl('annotationClear', 0, 0);
+                    resetLocalStrokes();
                 }
                 isScrolling = false;
             });
@@ -1221,6 +1268,7 @@
         // ==================== 發送控制指令 ====================
         async function sendControl(type, x = 0, y = 0, deltaY = null, deltaX = null) {
             if (!token) return;
+            if (isLocked) return;
             
             const img = document.getElementById('streamImage');
             
@@ -1404,6 +1452,13 @@
             clearLocalCanvas();
             console.log('模式切換：捲動控制');
         }
+
+        function toggleLock() {
+            isLocked = !isLocked;
+            const lockBtn = document.getElementById('lockBtn');
+            if (lockBtn) lockBtn.classList.toggle('active', isLocked);
+            console.log(isLocked ? '已鎖定控制輸入' : '已解除鎖定');
+        }
         
         /**
          * 設定畫筆顏色並更新 UI 選中狀態
@@ -1464,12 +1519,30 @@
          */
         function clearAll() {
             clearAnnotations(); // 通知伺服器清空
-            clearLocalCanvas(); // 清空本地快感畫布
+            resetLocalStrokes(); // 清空本地快感畫布與歷史
             if (localClearTimer) {
                 clearTimeout(localClearTimer);
                 localClearTimer = null;
             }
             console.log('標註已全數清空');
+        }
+
+        function undo() {
+            if (strokeHistory.length > 0) {
+                const stroke = strokeHistory.pop();
+                redoHistory.push(stroke);
+                redrawLocalCanvas();
+            }
+            sendControl('annotationUndo', 0, 0);
+        }
+
+        function redo() {
+            if (redoHistory.length > 0) {
+                const stroke = redoHistory.pop();
+                strokeHistory.push(stroke);
+                redrawLocalCanvas();
+            }
+            sendControl('annotationRedo', 0, 0);
         }
         
         /**
@@ -1491,7 +1564,7 @@
             .then(data => {
                 if (data.success) {
                     // 同步確認後，確保本地畫布也清空
-                    clearLocalCanvas();
+                    resetLocalStrokes();
                 }
             })
             .catch(error => console.error('嘗試清除主機端標註時發生失敗:', error));
@@ -1508,7 +1581,7 @@
                 clearAnnotations();
                 clearLocalCanvas();
                 
-                localStorage.removeItem('broadme_control_token');
+                sessionStorage.removeItem('broadme_control_token');
                 token = null;
             }
             window.location.reload(); // 重整以釋放資源
@@ -1543,7 +1616,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'image/jpeg',
-                        'X-Control-Token': token || localStorage.getItem('broadme_control_token') || ''
+                        'X-Control-Token': token || sessionStorage.getItem('broadme_control_token') || ''
                     },
                     body: compressedBlob
                 });

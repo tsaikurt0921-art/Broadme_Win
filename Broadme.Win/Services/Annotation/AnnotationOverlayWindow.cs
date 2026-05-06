@@ -12,10 +12,12 @@ public sealed class AnnotationOverlayWindow : Window
 
     private readonly System.Windows.Controls.Canvas _canvas;
     private Polyline? _currentStroke;
+    private readonly List<Polyline> _strokeHistory = new();
+    private readonly Stack<Polyline> _redoStack = new();
 
     private AnnotationOverlayWindow()
     {
-        var bounds = Forms.SystemInformation.VirtualScreen;
+        var bounds = Forms.Screen.PrimaryScreen?.Bounds ?? Forms.SystemInformation.VirtualScreen;
 
         Left = bounds.Left;
         Top = bounds.Top;
@@ -78,6 +80,7 @@ public sealed class AnnotationOverlayWindow : Window
             };
             _currentStroke.Points.Add(point);
             _canvas.Children.Add(_currentStroke);
+            _redoStack.Clear();
         });
     }
 
@@ -94,6 +97,10 @@ public sealed class AnnotationOverlayWindow : Window
         Dispatcher.Invoke(() =>
         {
             _currentStroke?.Points.Add(point);
+            if (_currentStroke is not null && !_strokeHistory.Contains(_currentStroke))
+            {
+                _strokeHistory.Add(_currentStroke);
+            }
             _currentStroke = null;
         });
     }
@@ -103,8 +110,35 @@ public sealed class AnnotationOverlayWindow : Window
         Dispatcher.Invoke(() =>
         {
             _canvas.Children.Clear();
+            _strokeHistory.Clear();
+            _redoStack.Clear();
             _currentStroke = null;
             HideOverlay();
+        });
+    }
+
+    public void UndoStroke()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_strokeHistory.Count == 0) return;
+            var last = _strokeHistory[^1];
+            _strokeHistory.RemoveAt(_strokeHistory.Count - 1);
+            _canvas.Children.Remove(last);
+            _redoStack.Push(last);
+            if (_canvas.Children.Count == 0) HideOverlay();
+        });
+    }
+
+    public void RedoStroke()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_redoStack.Count == 0) return;
+            var stroke = _redoStack.Pop();
+            _canvas.Children.Add(stroke);
+            _strokeHistory.Add(stroke);
+            ShowOverlay();
         });
     }
 }

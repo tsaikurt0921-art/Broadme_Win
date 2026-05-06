@@ -26,12 +26,20 @@ jobs:
         run: dotnet restore ./Broadme.Win/Broadme.Win.csproj
 
       - name: Publish (win-x64 self-contained)
-        run: dotnet publish ./Broadme.Win/Broadme.Win.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o ./release/win-x64
+        run: dotnet publish ./Broadme.Win/Broadme.Win.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o ./release/win-x64
+
+      - name: Install Obfuscar
+        run: dotnet tool install --global Obfuscar.GlobalTool
+
+      - name: Obfuscate
+        shell: pwsh
+        run: |
+          obfuscar.console ./obfuscar.xml
 
       - name: Zip release payload
         shell: pwsh
         run: |
-          Compress-Archive -Path ./release/win-x64/* -DestinationPath ./Broadme.Win-win-x64.zip
+          Compress-Archive -Path ./release/win-x64-obfuscated/* -DestinationPath ./Broadme.Win-win-x64.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

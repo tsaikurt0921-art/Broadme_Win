@@ -25,7 +25,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly BroadmeLogger _logger;
     private readonly InputSimulator _input = new();
     private readonly AnnotationOverlayWindow _annotation = AnnotationOverlayWindow.Instance;
-    private readonly AppConfig _config = new();
+    private readonly AppConfig _config = AppConfig.Load();
     private readonly CancellationTokenSource _cts = new();
 
     private readonly ControlAuthManager _controlAuth = new();
@@ -53,7 +53,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         _server.ClientCountChanged += c => ClientCount = c;
         _server.ControlCommandReceived += HandleControlCommand;
-        _server.PhotoUploaded += HandlePhotoUploaded;
+        _server.PhotoUploaded += data => _ = HandlePhotoUploadedAsync(data);
 
         ToggleBroadcastCommand = new RelayCommand(async () => await ToggleBroadcastAsync());
         CopyUrlCommand = new RelayCommand(CopyUrl);
@@ -167,6 +167,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _config.SelectedResolution = SelectedResolution;
         _config.SelectedFps = SelectedFps;
         _config.BindIp = SelectedInterface?.IpAddress ?? "0.0.0.0";
+        _config.Save();
 
         var pin = _controlPin.Generate();
         await _logger.LogAsync($"控制 PIN 已生成: {pin}");
@@ -241,7 +242,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             _controlAuth.Authorize(pin);
             StatusMessage = $"已授權控制 PIN: {pin}";
-        }, _config.StreamPort);
+        }, _config.StreamPort, CurrentIp);
 
         prompt.ShowDialog();
     }
@@ -253,7 +254,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
     }
 
-    private async void HandlePhotoUploaded(byte[] data)
+    private async Task HandlePhotoUploadedAsync(byte[] data)
     {
         try
         {
@@ -270,7 +271,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void HandleControlCommand(ControlCommand cmd)
     {
-        var bounds = SystemInformation.VirtualScreen;
+        var bounds = Screen.PrimaryScreen?.Bounds ?? SystemInformation.VirtualScreen;
         var x = bounds.Left + (cmd.X * bounds.Width);
         var y = bounds.Top + (cmd.Y * bounds.Height);
         var point = new System.Windows.Point(x - bounds.Left, y - bounds.Top);
@@ -300,7 +301,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 _annotation.EndStroke(point);
                 break;
             case "annotationClear":
-                _annotation.EndStroke(point);
+                _annotation.ClearAll();
+                break;
+            case "annotationUndo":
+                _annotation.UndoStroke();
+                break;
+            case "annotationRedo":
+                _annotation.RedoStroke();
                 break;
             case "clearAnnotations":
                 _annotation.ClearAll();

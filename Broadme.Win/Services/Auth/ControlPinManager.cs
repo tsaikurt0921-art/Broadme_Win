@@ -1,9 +1,10 @@
+using System.Security.Cryptography;
+
 namespace Broadme.Win.Services.Auth;
 
 public sealed class ControlPinManager
 {
     private readonly object _lock = new();
-    private readonly Random _random = new();
 
     public string? CurrentPin { get; private set; }
     public DateTimeOffset? Expiry { get; private set; }
@@ -13,7 +14,7 @@ public sealed class ControlPinManager
     {
         lock (_lock)
         {
-            CurrentPin = _random.Next(0, 1_000_000).ToString("D6");
+            CurrentPin = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
             Expiry = DateTimeOffset.UtcNow.AddSeconds(ttlSeconds);
             return CurrentPin;
         }
