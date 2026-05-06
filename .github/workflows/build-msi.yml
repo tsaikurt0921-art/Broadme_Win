@@ -20,6 +20,9 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
+    - name: Restore app runtime packs (win-x64)
+      run: dotnet restore ./Broadme.Win/Broadme.Win.csproj -r win-x64 -p:Platform=x64
+
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 

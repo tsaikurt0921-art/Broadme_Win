@@ -3,8 +3,13 @@ Write-Host "--- Starting Broadme MSI Packaging ---" -ForegroundColor Cyan
 
 # 1. Publish the application
 Write-Host "1. Publishing Broadme.Win (Unpackaged, Self-Contained)..." -ForegroundColor Yellow
-msbuild Broadme.Win/Broadme.Win.csproj /t:Restore /p:Configuration=Release /p:RuntimeIdentifier=win-x64 /p:Platform=x64 /v:m /nologo
-msbuild Broadme.Win/Broadme.Win.csproj /t:Publish /p:Configuration=Release /p:RuntimeIdentifier=win-x64 /p:Platform=x64 /p:SelfContained=true /p:PublishReadyToRun=false /v:m /nologo
+dotnet restore Broadme.Win/Broadme.Win.csproj -r win-x64 -p:Platform=x64
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: Failed to restore application with RID win-x64." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
+dotnet publish Broadme.Win/Broadme.Win.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishReadyToRun=false --no-restore
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: Failed to publish application." -ForegroundColor Red
